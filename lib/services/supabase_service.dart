@@ -5,6 +5,7 @@ import '../models/plataforma.dart';
 import '../models/cliente.dart';
 import '../models/suscripcion.dart';
 import '../models/perfil.dart';
+import '../models/cuenta_correo.dart';
 
 class SupabaseService {
   final _client = Supabase.instance.client;
@@ -238,5 +239,48 @@ class SupabaseService {
     }
   }
 
-  Future<void> logout() async {}
+  // ==================== CUENTAS ====================
+  
+  Future<List<CuentaCorreo>> obtenerCuentas() async {
+    try {
+      final response = await _client
+          .from('cuentas_correo')
+          .select()
+          .filter('deleted_at', 'is', null)
+          .order('email');
+
+      return (response as List)
+          .map((json) => CuentaCorreo.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener cuentas: $e');
+    }
+  }
+
+  Future<void> crearCuenta(CuentaCorreo cuenta) async {
+    try {
+      await _client.from('cuentas_correo').insert(cuenta.toJson());
+    } catch (e) {
+      throw Exception('Error al crear cuenta: $e');
+    }
+  }
+
+  Future<void> actualizarCuenta(CuentaCorreo cuenta) async {
+    try {
+      await _client
+          .from('cuentas_correo')
+          .update(cuenta.toJson())
+          .eq('id', cuenta.id);
+    } catch (e) {
+      throw Exception('Error al actualizar cuenta: $e');
+    }
+  }
+
+  Future<void> eliminarCuenta(String id) async {
+    try {
+      await _client.from('cuentas_correo').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Error al eliminar cuenta: $e');
+    }
+  }
 }

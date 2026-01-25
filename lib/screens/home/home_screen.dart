@@ -24,32 +24,44 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  Widget _currentScreen = const DashboardScreen();
+  String _currentTitle = 'Inicio';
 
-  final List<Widget> _screens = [
-    // --- Del 0 al 4 (Bottom Navigation Bar) ---
-    const DashboardScreen(),            // 0
-    const PerfilesScreen(),             // 1
-    const SizedBox.shrink(),            // 2 (Espacio del botón central FAB)
-    const GestionPagosClientesScreen(), // 3
-    const ReportesScreen(),             // 4
-    
-    // --- Del 5 en adelante (Solo accesibles desde el Drawer) ---
-    const PlataformasScreen(),          // 5
-    const CuentasScreen(),              // 6
-    const ClientesScreen(),             // 7
-    const SuscripcionesScreen(),        // 8
-    const AlertasScreen(),              // 9
-    const UsuariosScreen(),             // 10
-    const ConfiguracionScreen(),        // 11
-  ];
-  final List<String> _titles = [
-    'Dashboard', 'Perfiles', '', 'Cobros', 'Reportes',
-    'Plataformas', 'Cuentas', 'Clientes', 'Suscripciones', 'Alertas', 'Usuarios', 'Configuración'
-  ];
+  // Páginas del bottom nav
+  void _onBottomNavTapped(int index) {
+    if (index == 2) return; // Ignorar placeholder del FAB
 
-  void _onItemTapped(int index) {
-    if (index == 2) return; // Ignorar tap en FAB placeholder
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      switch (index) {
+        case 0:
+          _currentScreen = const DashboardScreen();
+          _currentTitle = 'Inicio';
+          break;
+        case 1:
+          _currentScreen = const PerfilesScreen();
+          _currentTitle = 'Perfiles';
+          break;
+        case 3:
+          _currentScreen = const GestionPagosClientesScreen();
+          _currentTitle = 'Gestión de Cobros';
+          break;
+        case 4:
+          _currentScreen = const ReportesScreen();
+          _currentTitle = 'Reportes';
+          break;
+      }
+    });
+  }
+
+  // Navegación desde drawer
+  void _navigateToScreen(Widget screen, String title, {int? bottomNavIndex}) {
+    Navigator.pop(context); // Cerrar drawer
+    setState(() {
+      _currentScreen = screen;
+      _currentTitle = title;
+      _selectedIndex = bottomNavIndex ?? -1;
+    });
   }
 
   void _crearSuscripcionRapida() {
@@ -92,10 +104,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
 
-    int bottomNavIndex = _selectedIndex > 4 ? 0 : _selectedIndex;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_getPageTitle()),
+        title: Text(_currentTitle),
         actions: [
           // Usuario info
           Padding(
@@ -136,16 +147,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       drawer: _buildDrawer(context, userProvider),
-      body: _screens[_selectedIndex],
-      floatingActionButton: FloatingActionButton(
-        onPressed: _crearSuscripcionRapida,
-        elevation: 4,
-        child: const Icon(Icons.add),
+      body: _currentScreen,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 80.0),
+        child: FloatingActionButton(
+          onPressed: _crearSuscripcionRapida,
+          elevation: 4,
+          child: const Icon(Icons.add),
+        ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButtonLocation: FloatingActionButtonLocation.miniCenterDocked,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex == 2 ? 0 : _selectedIndex,
-        onDestinationSelected: _onItemTapped,
+        selectedIndex: _selectedIndex >= 0 ? _selectedIndex : 0,
+        onDestinationSelected: _onBottomNavTapped,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -158,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Perfiles',
           ),
           NavigationDestination(
-            icon: SizedBox(width: 48), // Espacio para FAB
+            icon: SizedBox(width: 48),
             label: '',
           ),
           NavigationDestination(
@@ -174,21 +188,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-  }
-
-  String _getPageTitle() {
-    switch (_selectedIndex) {
-      case 0:
-        return 'Inicio';
-      case 1:
-        return 'Perfiles';
-      case 3:
-        return 'Gestión de Cobros';
-      case 4:
-        return 'Reportes';
-      default:
-        return 'DalePlay';
-    }
   }
 
   Widget _buildDrawer(BuildContext context, UserProvider userProvider) {
@@ -227,6 +226,20 @@ class _HomeScreenState extends State<HomeScreen> {
             accountEmail: Text(user?.email ?? ''),
           ),
 
+          // Inicio (bottom nav)
+          _buildDrawerTile(
+            context,
+            icon: Icons.home,
+            title: 'Inicio',
+            onTap: () => _navigateToScreen(
+              const DashboardScreen(),
+              'Inicio',
+              bottomNavIndex: 0,
+            ),
+          ),
+
+          const Divider(),
+
           // Gestión
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -243,49 +256,47 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             icon: Icons.tv,
             title: 'Plataformas',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PlataformasScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const PlataformasScreen(),
+              'Plataformas',
+            ),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.email,
             title: 'Cuentas',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CuentasScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const CuentasScreen(),
+              'Cuentas',
+            ),
+          ),
+          _buildDrawerTile(
+            context,
+            icon: Icons.person,
+            title: 'Perfiles',
+            onTap: () => _navigateToScreen(
+              const PerfilesScreen(),
+              'Perfiles',
+              bottomNavIndex: 1,
+            ),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.people,
             title: 'Clientes',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ClientesScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const ClientesScreen(),
+              'Clientes',
+            ),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.subscriptions,
             title: 'Suscripciones',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SuscripcionesScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const SuscripcionesScreen(),
+              'Suscripciones',
+            ),
           ),
 
           const Divider(),
@@ -304,27 +315,41 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           _buildDrawerTile(
             context,
+            icon: Icons.payments,
+            title: 'Gestión de Cobros',
+            onTap: () => _navigateToScreen(
+              const GestionPagosClientesScreen(),
+              'Gestión de Cobros',
+              bottomNavIndex: 3,
+            ),
+          ),
+          _buildDrawerTile(
+            context,
             icon: Icons.credit_card,
             title: 'Pagos a Proveedores',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PagosPlataformaScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const PagosPlataformaScreen(),
+              'Pagos a Proveedores',
+            ),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.notifications,
             title: 'Alertas',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AlertasScreen()),
-              );
-            },
+            onTap: () => _navigateToScreen(
+              const AlertasScreen(),
+              'Alertas',
+            ),
+          ),
+          _buildDrawerTile(
+            context,
+            icon: Icons.bar_chart,
+            title: 'Reportes',
+            onTap: () => _navigateToScreen(
+              const ReportesScreen(),
+              'Reportes',
+              bottomNavIndex: 4,
+            ),
           ),
 
           const Divider(),
@@ -346,25 +371,19 @@ class _HomeScreenState extends State<HomeScreen> {
               context,
               icon: Icons.people_outline,
               title: 'Usuarios',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const UsuariosScreen()),
-                );
-              },
+              onTap: () => _navigateToScreen(
+                const UsuariosScreen(),
+                'Usuarios',
+              ),
             ),
             _buildDrawerTile(
               context,
               icon: Icons.settings,
               title: 'Configuración',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ConfiguracionScreen()),
-                );
-              },
+              onTap: () => _navigateToScreen(
+                const ConfiguracionScreen(),
+                'Configuración',
+              ),
             ),
             const Divider(),
           ],

@@ -24,7 +24,7 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
 
   Future<void> _cargarPlataformas() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final plataformas = await _supabaseService.obtenerPlataformas();
       setState(() => _plataformas = plataformas);
@@ -79,16 +79,16 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
       try {
         await _supabaseService.eliminarPlataforma(plataforma.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Plataforma eliminada')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Plataforma eliminada')));
           _cargarPlataformas();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al eliminar: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
         }
       }
     }
@@ -98,52 +98,55 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       //espacio para que no este pegada la primera card al appbar
-      
       body: Container(
         padding: const EdgeInsets.only(top: 20),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _plataformas.isEmpty
-                ? Center(
-                  //dejar un espacio entre el icono y el appbar
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 800),
-                        Icon(Icons.tv_off, size: 80, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No hay plataformas registradas',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                color: Colors.grey[600],
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Agrega tu primera plataforma',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
+            ? Center(
+                //dejar un espacio entre el icono y el appbar
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 800),
+                    Icon(Icons.tv_off, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No hay plataformas registradas',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
                     ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _cargarPlataformas,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _plataformas.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final plataforma = _plataformas[index];
-                        return _buildPlataformaCard(plataforma);
-                      },
+                    const SizedBox(height: 8),
+                    Text(
+                      'Agrega tu primera plataforma',
+                      style: TextStyle(color: Colors.grey[600]),
                     ),
-                  ),
+                  ],
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: _cargarPlataformas,
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _plataformas.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final plataforma = _plataformas[index];
+                    return _buildPlataformaCard(plataforma);
+                  },
+                ),
+              ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarDialogoPlataforma(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva Plataforma'),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 32.0),
+        child: FloatingActionButton.extended(
+          onPressed: () => _mostrarDialogoPlataforma(),
+          icon: const Icon(Icons.add),
+          label: const Text('Nueva Plataforma'),
+        ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -165,10 +168,7 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
               decoration: BoxDecoration(
                 color: colorPlataforma,
                 gradient: LinearGradient(
-                  colors: [
-                    colorPlataforma,
-                    colorPlataforma.withOpacity(0.8),
-                  ],
+                  colors: [colorPlataforma, colorPlataforma.withOpacity(0.8)],
                 ),
               ),
               child: Row(
@@ -254,7 +254,9 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
                         onPressed: () => _eliminarPlataforma(plataforma),
                         icon: const Icon(Icons.delete, size: 18),
                         label: const Text('Eliminar'),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
                       ),
                     ],
                   ),
@@ -269,20 +271,34 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
 
   Widget _buildLogo(Plataforma plataforma) {
     final logos = {
-      'Netflix': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
-      'Mega Premium - Netflix': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
-      'Disney+': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/330px-Disney%2B_logo.svg.png',
-      'HBO': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/330px-HBO_logo.svg.png',
-      'HBO Max': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
-      'Max': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
-      'Prime Video': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
-      'Spotify': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
-      'YouTube Premium': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
-      'Paramount+': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
-      'Apple TV+': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
-      'Vix' : 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
-      'Viki' : 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
-      'Crunchyroll' : 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
+      'Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Mega Premium - Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Disney+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/330px-Disney%2B_logo.svg.png',
+      'HBO':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/330px-HBO_logo.svg.png',
+      'HBO Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Prime Video':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
+      'Spotify':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
+      'YouTube Premium':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
+      'Paramount+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
+      'Apple TV+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
+      'Vix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
+      'Viki':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
+      'Crunchyroll':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
     };
 
     final logoUrl = logos[plataforma.nombre];
@@ -299,11 +315,8 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
         child: CachedNetworkImage(
           imageUrl: logoUrl,
           fit: BoxFit.contain,
-          errorWidget: (_, __, ___) => const FaIcon(
-            FontAwesomeIcons.tv,
-            size: 24,
-            color: Colors.grey,
-          ),
+          errorWidget: (_, __, ___) =>
+              const FaIcon(FontAwesomeIcons.tv, size: 24, color: Colors.grey),
         ),
       );
     }
@@ -315,11 +328,7 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
         color: Colors.white,
         shape: BoxShape.circle,
       ),
-      child: const FaIcon(
-        FontAwesomeIcons.tv,
-        size: 24,
-        color: Colors.grey,
-      ),
+      child: const FaIcon(FontAwesomeIcons.tv, size: 24, color: Colors.grey),
     );
   }
 
@@ -333,20 +342,14 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
             const SizedBox(width: 4),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -359,11 +362,7 @@ class PlataformaDialog extends StatefulWidget {
   final Plataforma? plataforma;
   final VoidCallback onGuardar;
 
-  const PlataformaDialog({
-    super.key,
-    this.plataforma,
-    required this.onGuardar,
-  });
+  const PlataformaDialog({super.key, this.plataforma, required this.onGuardar});
 
   @override
   State<PlataformaDialog> createState() => _PlataformaDialogState();
@@ -372,13 +371,13 @@ class PlataformaDialog extends StatefulWidget {
 class _PlataformaDialogState extends State<PlataformaDialog> {
   final _formKey = GlobalKey<FormState>();
   final _supabaseService = SupabaseService();
-  
+
   late TextEditingController _nombreController;
   late TextEditingController _precioController;
   late TextEditingController _maxPerfilesController;
   late TextEditingController _notasController;
   late TextEditingController _precioCompletaController;
-  
+
   String _colorSeleccionado = '#2196F3';
   String _estadoSeleccionado = 'activa';
   bool _isLoading = false;
@@ -439,8 +438,8 @@ class _PlataformaDialogState extends State<PlataformaDialog> {
         color: _colorSeleccionado,
         estado: _estadoSeleccionado,
         fechaCreacion: widget.plataforma?.fechaCreacion ?? DateTime.now(),
-        notas: _notasController.text.trim().isEmpty 
-            ? null 
+        notas: _notasController.text.trim().isEmpty
+            ? null
             : _notasController.text.trim(),
         precioCompleta: _precioCompletaController.text.isEmpty
             ? null
@@ -467,9 +466,9 @@ class _PlataformaDialogState extends State<PlataformaDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {
@@ -490,7 +489,9 @@ class _PlataformaDialogState extends State<PlataformaDialog> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Color(int.parse(_colorSeleccionado.replaceFirst('#', '0xFF'))),
+                color: Color(
+                  int.parse(_colorSeleccionado.replaceFirst('#', '0xFF')),
+                ),
               ),
               child: Text(
                 widget.plataforma == null
@@ -590,15 +591,21 @@ class _PlataformaDialogState extends State<PlataformaDialog> {
                           return InkWell(
                             onTap: _isLoading
                                 ? null
-                                : () => setState(() => _colorSeleccionado = color),
+                                : () => setState(
+                                    () => _colorSeleccionado = color,
+                                  ),
                             child: Container(
                               width: 48,
                               height: 48,
                               decoration: BoxDecoration(
-                                color: Color(int.parse(color.replaceFirst('#', '0xFF'))),
+                                color: Color(
+                                  int.parse(color.replaceFirst('#', '0xFF')),
+                                ),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isSelected ? Colors.black : Colors.grey,
+                                  color: isSelected
+                                      ? Colors.black
+                                      : Colors.grey,
                                   width: isSelected ? 3 : 1,
                                 ),
                               ),
@@ -619,8 +626,14 @@ class _PlataformaDialogState extends State<PlataformaDialog> {
                           prefixIcon: Icon(Icons.toggle_on),
                         ),
                         items: const [
-                          DropdownMenuItem(value: 'activa', child: Text('Activa')),
-                          DropdownMenuItem(value: 'inactiva', child: Text('Inactiva')),
+                          DropdownMenuItem(
+                            value: 'activa',
+                            child: Text('Activa'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'inactiva',
+                            child: Text('Inactiva'),
+                          ),
                         ],
                         onChanged: _isLoading
                             ? null
