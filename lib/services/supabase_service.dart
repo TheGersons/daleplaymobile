@@ -1,3 +1,5 @@
+import 'package:daleplay/models/alerta.dart';
+import 'package:daleplay/models/configuracion.dart';
 import 'package:daleplay/models/pago.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 import 'package:dbcrypt/dbcrypt.dart';
@@ -7,6 +9,8 @@ import '../models/cliente.dart';
 import '../models/suscripcion.dart';
 import '../models/perfil.dart';
 import '../models/cuenta_correo.dart';
+import '../models/pago_plataforma.dart';
+import '../models/historial_pago_plataforma.dart';
 
 class SupabaseService {
   final _client = Supabase.instance.client;
@@ -291,9 +295,7 @@ class SupabaseService {
           .select()
           .order('nombre_completo'); // Ordenar por nombre
 
-      return (response as List)
-          .map((json) => AuthUser.fromJson(json))
-          .toList();
+      return (response as List).map((json) => AuthUser.fromJson(json)).toList();
     } catch (e) {
       throw Exception('Error al obtener usuarios: $e');
     }
@@ -315,22 +317,25 @@ class SupabaseService {
     }
   }
 
-  Future<void> actualizarUsuario(AuthUser usuario, {String? newPassword}) async {
+  Future<void> actualizarUsuario(
+    AuthUser usuario, {
+    String? newPassword,
+  }) async {
     try {
       final json = usuario.toJson();
-      
+
       // Si se proporciona una nueva contraseña, la encriptamos y actualizamos
       if (newPassword != null && newPassword.isNotEmpty) {
-        json['password_hash'] = DBCrypt().hashpw(newPassword, DBCrypt().gensalt());
+        json['password_hash'] = DBCrypt().hashpw(
+          newPassword,
+          DBCrypt().gensalt(),
+        );
       } else {
         // Si no, removemos el campo para no tocarlo en la BD
         json.remove('password_hash');
       }
 
-      await _client
-          .from('auth_users')
-          .update(json)
-          .eq('id', usuario.id);
+      await _client.from('auth_users').update(json).eq('id', usuario.id);
     } catch (e) {
       throw Exception('Error al actualizar usuario: $e');
     }
@@ -338,7 +343,7 @@ class SupabaseService {
 
   Future<void> eliminarUsuario(String id) async {
     try {
-      // Hard delete o Soft delete dependiendo de tu preferencia. 
+      // Hard delete o Soft delete dependiendo de tu preferencia.
       // Usaremos Delete físico por consistencia con el código C#
       await _client.from('auth_users').delete().eq('id', id);
     } catch (e) {
@@ -347,7 +352,7 @@ class SupabaseService {
   }
 
   // ==================== PAGOS ====================
-  
+
   Future<List<Pago>> obtenerPagos() async {
     try {
       final response = await _client
@@ -355,9 +360,7 @@ class SupabaseService {
           .select()
           .order('fecha_pago', ascending: false);
 
-      return (response as List)
-          .map((json) => Pago.fromJson(json))
-          .toList();
+      return (response as List).map((json) => Pago.fromJson(json)).toList();
     } catch (e) {
       throw Exception('Error al obtener pagos: $e');
     }
@@ -373,10 +376,7 @@ class SupabaseService {
 
   Future<void> actualizarPago(Pago pago) async {
     try {
-      await _client
-          .from('pagos')
-          .update(pago.toJson())
-          .eq('id', pago.id);
+      await _client.from('pagos').update(pago.toJson()).eq('id', pago.id);
     } catch (e) {
       throw Exception('Error al actualizar pago: $e');
     }
@@ -390,4 +390,150 @@ class SupabaseService {
     }
   }
 
+  // ==================== PAGOS PLATAFORMA ====================
+
+  Future<List<PagoPlataforma>> obtenerPagosPlataforma() async {
+    try {
+      final response = await _client
+          .from('pagos_plataforma')
+          .select()
+          .order('fecha_proximo_pago');
+
+      return (response as List)
+          .map((json) => PagoPlataforma.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener pagos plataforma: $e');
+    }
+  }
+
+  Future<void> crearPagoPlataforma(PagoPlataforma pago) async {
+    try {
+      await _client.from('pagos_plataforma').insert(pago.toJson());
+    } catch (e) {
+      throw Exception('Error al crear pago plataforma: $e');
+    }
+  }
+
+  Future<void> actualizarPagoPlataforma(PagoPlataforma pago) async {
+    try {
+      await _client
+          .from('pagos_plataforma')
+          .update(pago.toJson())
+          .eq('id', pago.id);
+    } catch (e) {
+      throw Exception('Error al actualizar pago plataforma: $e');
+    }
+  }
+
+  Future<void> eliminarPagoPlataforma(String id) async {
+    try {
+      await _client.from('pagos_plataforma').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Error al eliminar pago plataforma: $e');
+    }
+  }
+
+  // ==================== HISTORIAL PAGOS PLATAFORMA ====================
+
+  Future<List<HistorialPagoPlataforma>> obtenerHistorialPagosPlataforma(
+    String pagoPlataformaId,
+  ) async {
+    try {
+      final response = await _client
+          .from('historial_pagos_plataforma')
+          .select()
+          .eq('pago_plataforma_id', pagoPlataformaId)
+          .order('fecha_pago', ascending: false);
+
+      return (response as List)
+          .map((json) => HistorialPagoPlataforma.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener historial: $e');
+    }
+  }
+
+  Future<void> registrarPagoPlataforma(
+    HistorialPagoPlataforma historial,
+  ) async {
+    try {
+      await _client
+          .from('historial_pagos_plataforma')
+          .insert(historial.toJson());
+    } catch (e) {
+      throw Exception('Error al registrar pago: $e');
+    }
+  }
+
+  // ==================== ALERTAS ====================
+
+  Future<List<Alerta>> obtenerAlertas() async {
+    try {
+      final response = await _client
+          .from('alertas')
+          .select()
+          .order('fecha_creacion', ascending: false);
+
+      return (response as List).map((json) => Alerta.fromJson(json)).toList();
+    } catch (e) {
+      throw Exception('Error al obtener alertas: $e');
+    }
+  }
+
+  Future<void> marcarAlertaComoLeida(String id) async {
+    try {
+      await _client.from('alertas').update({'estado': 'leida'}).eq('id', id);
+    } catch (e) {
+      throw Exception('Error al marcar alerta: $e');
+    }
+  }
+
+  Future<void> marcarAlertaComoResuelta(String id) async {
+    try {
+      await _client.from('alertas').update({'estado': 'resuelta'}).eq('id', id);
+    } catch (e) {
+      throw Exception('Error al resolver alerta: $e');
+    }
+  }
+
+  Future<void> eliminarAlerta(String id) async {
+    try {
+      await _client.from('alertas').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Error al eliminar alerta: $e');
+    }
+  }
+
+  // ==================== CONFIGURACION ====================
+
+  Future<List<Configuracion>> obtenerConfiguraciones() async {
+    try {
+      final response = await _client
+          .from('configuracion')
+          .select()
+          .order('categoria')
+          .order('clave');
+
+      return (response as List)
+          .map((json) => Configuracion.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener configuraciones: $e');
+    }
+  }
+
+  Future<void> actualizarConfiguracion(Configuracion config) async {
+    try {
+      await _client
+          .from('configuracion')
+          .update({
+            'valor': config.valor,
+            'fecha_modificacion': DateTime.now().toIso8601String(),
+          })
+          .eq('id', config.id);
+    } catch (e) {
+      throw Exception('Error al actualizar configuración: $e');
+    }
+  }
 }
