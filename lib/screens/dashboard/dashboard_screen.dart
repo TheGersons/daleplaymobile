@@ -8,7 +8,6 @@ import '../../services/supabase_service.dart';
 import '../../providers/user_provider.dart';
 import '../../models/suscripcion.dart';
 import '../../models/plataforma.dart';
-import '../../models/cliente.dart';
 import '../../models/perfil.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -24,7 +23,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   List<Suscripcion> _suscripciones = [];
   List<Plataforma> _plataformas = [];
-  List<Cliente> _clientes = [];
   List<Perfil> _perfiles = [];
   
   int _totalSuscripcionesActivas = 0;
@@ -70,7 +68,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _suscripciones = suscripcionesActivas;
         _plataformas = plataformas;
-        _clientes = clientesActivos;
         _perfiles = perfiles;
         _totalSuscripcionesActivas = suscripcionesActivas.length;
         _ingresosMensuales = suscripcionesActivas.fold(0, (sum, s) => sum + s.precio);

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 import '../../models/auth_user.dart';
 import '../../services/supabase_service.dart';
 
@@ -463,6 +461,7 @@ class _UsuarioDialogState extends State<UsuarioDialog> {
                 const SizedBox(height: 16),
 
                 DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
                   value: _estadoSeleccionado,
                   decoration: const InputDecoration(
                     labelText: 'Estado',
