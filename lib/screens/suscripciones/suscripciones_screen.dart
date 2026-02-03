@@ -485,7 +485,10 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
                         final plataforma = _plataformas.firstWhere(
                           (p) => p.id == suscripcion.plataformaId,
                         );
+                        //controlamos la excepcion que no hay elementos
+
                         final perfil = _perfiles.firstWhere(
+                        
                           (p) => p.id == suscripcion.perfilId,
                         );
 
