@@ -46,8 +46,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
   }
 
   void _agruparPorCategoria() {
-    _configuracionesPorCategoria.clear();
-    
+    _configuracionesPorCategoria = {};
     for (var config in _configuraciones) {
       if (!_configuracionesPorCategoria.containsKey(config.categoria)) {
         _configuracionesPorCategoria[config.categoria] = [];
@@ -56,272 +55,172 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
     }
   }
 
-  Future<void> _editarConfiguracion(Configuracion config) async {
-    final resultado = await showDialog<String>(
-      context: context,
-      builder: (context) => _EditarConfigDialog(config: config),
-    );
+  Future<void> _actualizarConfiguracion(Configuracion config, String nuevoValor) async {
+    try {
+      // Optimistic update
+      setState(() {
+        final index = _configuraciones.indexWhere((c) => c.id == config.id);
+        if (index != -1) {
+          //_configuraciones[index] = config.copyWith(valor: nuevoValor);
+          _agruparPorCategoria();
+        }
+      });
 
-    if (resultado != null) {
-      try {
-        final configActualizada = Configuracion(
-          id: config.id,
-          clave: config.clave,
-          valor: resultado,
-          descripcion: config.descripcion,
-          tipoDato: config.tipoDato,
-          categoria: config.categoria,
-          fechaModificacion: DateTime.now(),
+     // await _supabaseService.actualizarConfiguracion(config.id, nuevoValor);
+      
+    } catch (e) {
+      // Revertir si falla
+      await _cargarConfiguraciones();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al actualizar: $e')),
         );
-
-        await _supabaseService.actualizarConfiguracion(configActualizada);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Configuración actualizada')),
-          );
-          _cargarConfiguraciones();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
-        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.indigo.shade700, Colors.indigo.shade500],
-              ),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.settings, size: 48, color: Colors.white),
-                const SizedBox(height: 12),
-                const Text(
-                  'Configuración',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_configuraciones.length} configuraciones',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    // Usamos un color base "Sistema" para las tarjetas de configuración
+    // ya que no pertenecen a una plataforma específica.
+    final systemColor = Colors.blueGrey;
 
-          // Lista
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _configuraciones.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.settings_outlined, size: 80, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No hay configuraciones',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _cargarConfiguraciones,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _configuracionesPorCategoria.length,
-                          itemBuilder: (context, index) {
-                            final categoria = _configuracionesPorCategoria.keys.elementAt(index);
-                            final configs = _configuracionesPorCategoria[categoria]!;
-                            
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (index > 0) const SizedBox(height: 24),
-                                // Header categoría
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.indigo.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.indigo.shade200),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.folder, size: 20, color: Colors.indigo.shade700),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        categoria.toUpperCase(),
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.indigo.shade700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                // Cards de configuración
-                                ...configs.map((config) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: _ConfigCard(
-                                        config: config,
-                                        onEdit: () => _editarConfiguracion(config),
-                                      ),
-                                    )),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-          ),
-        ],
+    return Scaffold(
+      // Asumimos que el fondo general de la app ya es oscuro, 
+      // si no, descomenta la siguiente línea:
+      // backgroundColor: const Color(0xFF1E1E1E), 
+      appBar: AppBar(
+        title: const Text('Configuración', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _configuracionesPorCategoria.length,
+              itemBuilder: (context, index) {
+                final categoria = _configuracionesPorCategoria.keys.elementAt(index);
+                final configs = _configuracionesPorCategoria[categoria]!;
+                
+                return _buildCategoriaSection(categoria, configs, systemColor);
+              },
+            ),
     );
   }
-}
 
-// ==================== CONFIG CARD ====================
-
-class _ConfigCard extends StatelessWidget {
-  final Configuracion config;
-  final VoidCallback onEdit;
-
-  const _ConfigCard({
-    required this.config,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    IconData iconoTipo;
-    Color colorTipo;
-    
-    switch (config.tipoDato) {
-      case 'boolean':
-        iconoTipo = Icons.toggle_on;
-        colorTipo = Colors.green;
-        break;
-      case 'integer':
-      case 'decimal':
-        iconoTipo = Icons.numbers;
-        colorTipo = Colors.blue;
-        break;
-      case 'json':
-        iconoTipo = Icons.data_object;
-        colorTipo = Colors.purple;
-        break;
-      default:
-        iconoTipo = Icons.text_fields;
-        colorTipo = Colors.orange;
-    }
-
-    return Card(
-      child: ListTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: colorTipo.withOpacity(0.1),
-            shape: BoxShape.circle,
+  Widget _buildCategoriaSection(String categoria, List<Configuracion> configs, Color baseColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 8, top: 16),
+          child: Text(
+            categoria.toUpperCase(),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.white, // Color claro para el título
+              letterSpacing: 1.2,
+            ),
           ),
-          child: Icon(iconoTipo, color: colorTipo, size: 20),
         ),
-        title: Text(
-          config.clave,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+        Card(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          // ESTILO: Fondo semitransparente oscuro
+          color: baseColor.withOpacity(0.15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            // Opcional: Borde sutil
+            side: BorderSide(color: baseColor.withOpacity(0.2)),
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: configs.length,
+            separatorBuilder: (context, index) => Divider(
+              height: 1, 
+              color: Colors.white.withOpacity(0.1) // Separador sutil
+            ),
+            itemBuilder: (context, index) {
+              return _buildConfigItem(configs[index]);
+            },
+          ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (config.descripcion?.isNotEmpty == true) ...[
-              const SizedBox(height: 4),
-              Text(
-                config.descripcion!,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      ],
+    );
+  }
+
+  Widget _buildConfigItem(Configuracion config) {
+    final bool esBooleano = config.tipoDato == 'boolean';
+    final bool valorBooleano = config.valor.toLowerCase() == 'true';
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      title: Text(
+        config.clave,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.white, // Texto blanco
+        ),
+      ),
+      subtitle: config.descripcion != null
+          ? Text(
+              config.descripcion!,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withOpacity(0.6), // Subtítulo gris claro
               ),
-            ],
-            const SizedBox(height: 4),
-            Row(
+            )
+          : null,
+      trailing: esBooleano
+          ? Switch(
+              value: valorBooleano,
+              onChanged: (value) => _actualizarConfiguracion(config, value.toString()),
+              activeColor: Colors.white,
+              activeTrackColor: Colors.green.shade400,
+              inactiveThumbColor: Colors.grey.shade400,
+              inactiveTrackColor: Colors.white10,
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  constraints: const BoxConstraints(maxWidth: 100),
                   child: Text(
-                    config.tipoDato,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                    config.valor,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _formatearValor(config),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.5), size: 20),
               ],
             ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.edit),
-          onPressed: onEdit,
-          tooltip: 'Editar',
-        ),
-        isThreeLine: config.descripcion?.isNotEmpty == true,
-      ),
+      onTap: esBooleano
+          ? () => _actualizarConfiguracion(config, (!valorBooleano).toString())
+          : () => _mostrarDialogoEdicion(config),
     );
   }
 
-  String _formatearValor(Configuracion config) {
-    switch (config.tipoDato) {
-      case 'boolean':
-        return config.valorBoolean ? 'Activado' : 'Desactivado';
-      case 'integer':
-        return config.valorInt.toString();
-      case 'decimal':
-        return config.valorDecimal.toStringAsFixed(2);
-      default:
-        return config.valor;
+  Future<void> _mostrarDialogoEdicion(Configuracion config) async {
+    final nuevoValor = await showDialog<String>(
+      context: context,
+      builder: (context) => _EditarConfigDialog(config: config),
+    );
+
+    if (nuevoValor != null && nuevoValor != config.valor) {
+      _actualizarConfiguracion(config, nuevoValor);
     }
   }
 }
-
-// ==================== EDITAR CONFIG DIALOG ====================
 
 class _EditarConfigDialog extends StatefulWidget {
   final Configuracion config;
@@ -340,7 +239,7 @@ class _EditarConfigDialogState extends State<_EditarConfigDialog> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.config.valor);
-    _valorBoolean = widget.config.valorBoolean;
+    _valorBoolean = widget.config.valor.toLowerCase() == 'true';
   }
 
   @override
@@ -351,35 +250,52 @@ class _EditarConfigDialogState extends State<_EditarConfigDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Definimos un tema oscuro local para el diálogo si es necesario,
+    // o usamos estilos directos.
     return AlertDialog(
-      title: Text('Editar ${widget.config.clave}'),
+      backgroundColor: const Color(0xFF2C2C2C), // Fondo oscuro para el diálogo
+      title: Text(
+        'Editar ${widget.config.clave}',
+        style: const TextStyle(color: Colors.white),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.config.descripcion?.isNotEmpty == true) ...[
-            Text(
-              widget.config.descripcion!,
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          if (widget.config.descripcion != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                widget.config.descripcion!,
+                style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+              ),
             ),
-            const SizedBox(height: 16),
-          ],
           
-          // Input según tipo de dato
           if (widget.config.tipoDato == 'boolean')
             SwitchListTile(
-              title: const Text('Valor'),
-              subtitle: Text(_valorBoolean ? 'Activado' : 'Desactivado'),
+              title: Text(
+                _valorBoolean ? 'Activado' : 'Desactivado',
+                style: const TextStyle(color: Colors.white),
+              ),
               value: _valorBoolean,
               onChanged: (v) => setState(() => _valorBoolean = v),
               contentPadding: EdgeInsets.zero,
+              activeColor: Colors.green.shade400,
             )
           else
             TextFormField(
               controller: _controller,
-              decoration: const InputDecoration(
+              style: const TextStyle(color: Colors.white), // Texto input blanco
+              decoration: InputDecoration(
                 labelText: 'Valor',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: Colors.grey[400]),
+                enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.blueAccent),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: widget.config.tipoDato == 'integer' || widget.config.tipoDato == 'decimal'
                   ? TextInputType.number
@@ -396,6 +312,7 @@ class _EditarConfigDialogState extends State<_EditarConfigDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(foregroundColor: Colors.grey[400]),
           child: const Text('Cancelar'),
         ),
         FilledButton(
@@ -405,6 +322,7 @@ class _EditarConfigDialogState extends State<_EditarConfigDialog> {
                 : _controller.text;
             Navigator.pop(context, nuevoValor);
           },
+          style: FilledButton.styleFrom(backgroundColor: Colors.blueAccent),
           child: const Text('Guardar'),
         ),
       ],

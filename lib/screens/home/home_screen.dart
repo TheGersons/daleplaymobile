@@ -14,6 +14,7 @@ import '../alertas/alertas_screen.dart';
 import '../usuarios/usuarios_screen.dart';
 import '../configuracion/configuracion_screen.dart';
 import '../auth/login_screen.dart';
+import '../suscripciones/suscripcion_rapida_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,13 +65,34 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _crearSuscripcionRapida() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Crear Suscripción Rápida - Próximamente'),
-        behavior: SnackBarBehavior.floating,
-      ),
+  void _crearSuscripcionRapida() async {
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (context) => const SuscripcionRapidaDialog(),
     );
+
+    if (resultado == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('✓ Suscripción creada exitosamente'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // Si estamos en dashboard, recargar
+      if (_selectedIndex == 0) {
+        setState(() {
+          _currentScreen = const DashboardScreen();
+        });
+      }
+    }
   }
 
   void _logout() {
@@ -118,14 +140,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     user?.nombreCompleto ?? 'Usuario',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text(
                     user?.isAdmin == true ? 'Administrador' : 'Vendedor',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -156,7 +178,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: const Icon(Icons.add),
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.miniCenterDocked,
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.miniCenterDocked,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex >= 0 ? _selectedIndex : 0,
         onDestinationSelected: _onBottomNavTapped,
@@ -171,10 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.person),
             label: 'Perfiles',
           ),
-          NavigationDestination(
-            icon: SizedBox(width: 48),
-            label: '',
-          ),
+          NavigationDestination(icon: SizedBox(width: 48), label: ''),
           NavigationDestination(
             icon: Icon(Icons.payments_outlined),
             selectedIcon: Icon(Icons.payments),
@@ -256,19 +276,14 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             icon: Icons.tv,
             title: 'Plataformas',
-            onTap: () => _navigateToScreen(
-              const PlataformasScreen(),
-              'Plataformas',
-            ),
+            onTap: () =>
+                _navigateToScreen(const PlataformasScreen(), 'Plataformas'),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.email,
             title: 'Cuentas',
-            onTap: () => _navigateToScreen(
-              const CuentasScreen(),
-              'Cuentas',
-            ),
+            onTap: () => _navigateToScreen(const CuentasScreen(), 'Cuentas'),
           ),
           _buildDrawerTile(
             context,
@@ -284,19 +299,14 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             icon: Icons.people,
             title: 'Clientes',
-            onTap: () => _navigateToScreen(
-              const ClientesScreen(),
-              'Clientes',
-            ),
+            onTap: () => _navigateToScreen(const ClientesScreen(), 'Clientes'),
           ),
           _buildDrawerTile(
             context,
             icon: Icons.subscriptions,
             title: 'Suscripciones',
-            onTap: () => _navigateToScreen(
-              const SuscripcionesScreen(),
-              'Suscripciones',
-            ),
+            onTap: () =>
+                _navigateToScreen(const SuscripcionesScreen(), 'Suscripciones'),
           ),
 
           const Divider(),
@@ -336,10 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             icon: Icons.notifications,
             title: 'Alertas',
-            onTap: () => _navigateToScreen(
-              const AlertasScreen(),
-              'Alertas',
-            ),
+            onTap: () => _navigateToScreen(const AlertasScreen(), 'Alertas'),
           ),
           _buildDrawerTile(
             context,
@@ -371,10 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
               context,
               icon: Icons.people_outline,
               title: 'Usuarios',
-              onTap: () => _navigateToScreen(
-                const UsuariosScreen(),
-                'Usuarios',
-              ),
+              onTap: () =>
+                  _navigateToScreen(const UsuariosScreen(), 'Usuarios'),
             ),
             _buildDrawerTile(
               context,
@@ -410,10 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return ListTile(
       leading: Icon(icon, color: color),
-      title: Text(
-        title,
-        style: TextStyle(color: color),
-      ),
+      title: Text(title, style: TextStyle(color: color)),
       onTap: onTap,
     );
   }

@@ -85,11 +85,14 @@ class SupabaseService {
   }
 
   Future<void> eliminarPlataforma(String id) async {
-    try {
+    return;
+    
+    /*try {
       await _client.from('plataformas').delete().eq('id', id);
     } catch (e) {
       throw Exception('Error al eliminar plataforma: $e');
     }
+    */
   }
 
   // ==================== CLIENTES ====================
@@ -110,7 +113,10 @@ class SupabaseService {
 
   Future<void> crearCliente(Cliente cliente) async {
     try {
-      await _client.from('clientes').insert(cliente.toJson());
+      // Excluimos 'id' para que Supabase lo genere, o lo mandamos si lo generas localmente
+      final json = cliente.toJson();
+      json.remove('id');
+      await _client.from('clientes').insert(json);
     } catch (e) {
       throw Exception('Error al crear cliente: $e');
     }
@@ -216,7 +222,11 @@ class SupabaseService {
 
   Future<void> crearCuenta(CuentaCorreo cuenta) async {
     try {
-      await _client.from('cuentas_correo').insert(cuenta.toJson());
+      // Excluimos 'id' para que Supabase lo genere, o lo mandamos si lo generas localmente
+      final json = cuenta.toJson();
+      json.remove('id');
+      
+      await _client.from('cuentas_correo').insert(json);
     } catch (e) {
       throw Exception('Error al crear cuenta: $e');
     }
@@ -246,10 +256,11 @@ class SupabaseService {
     try {
       // Excluimos 'id' para que Supabase lo genere, o lo mandamos si lo generas localmente
       final json = perfil.toJson();
-      if (perfil.id.isEmpty) json.remove('id');
+      json.remove('id');
 
       await _client.from('perfiles').insert(json);
     } catch (e) {
+      print('Error al crear perfil: $e');
       throw Exception('Error al crear perfil: $e');
     }
   }
@@ -534,6 +545,67 @@ class SupabaseService {
           .eq('id', config.id);
     } catch (e) {
       throw Exception('Error al actualizar configuración: $e');
+    }
+  }
+
+  // ==================== SUSCRIPCIÓN RÁPIDA (TRANSACCIONAL) ====================
+
+  Future<void> crearSuscripcionRapida({
+    required String clienteId,
+    required String perfilId,
+    required DateTime fechaInicio,
+    required double precio,
+    required String plataformaId,
+  }) async {
+    try {
+      // 1. Verificar que el perfil sigue disponible
+      final perfilResponse = await _client
+          .from('perfiles')
+          .select()
+          .eq('id', perfilId)
+          .single();
+
+      final perfil = Perfil.fromJson(perfilResponse);
+
+      if (perfil.estado != 'disponible') {
+        throw Exception('El perfil ya no está disponible');
+      }
+
+      // 2. Calcular fecha vencimiento (mismo día del siguiente mes)
+      final fechaVencimiento = DateTime(
+        fechaInicio.year,
+        fechaInicio.month + 1,
+        fechaInicio.day,
+      );
+
+      // 3. Crear suscripción
+      final suscripcion = Suscripcion(
+        id: '00000000-0000-0000-0000-000000000000',
+        plataformaId: plataformaId,
+        tipoSuscripcion: 'perfil',
+        clienteId: clienteId,
+        perfilId: perfilId,
+        fechaInicio: fechaInicio,
+        fechaProximoPago: fechaVencimiento,
+        fechaLimitePago: fechaVencimiento,
+        precio: precio,
+        estado: 'activa',
+        fechaCreacion: DateTime.now(),
+        notas: null,
+      );
+
+      await _client.from('suscripciones').insert(suscripcion.toJson());
+
+      // 4. Actualizar estado del perfil a "ocupado"
+      await _client
+          .from('perfiles')
+          .update({'estado': 'ocupado'})
+          .eq('id', perfilId);
+
+      // 5. NOTA: Las alertas se crean automáticamente por triggers en la BD
+      // No necesitamos crearlas manualmente aquí
+    } catch (e) {
+      throw Exception('Error al crear suscripción rápida: $e');
     }
   }
 }

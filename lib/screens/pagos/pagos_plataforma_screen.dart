@@ -36,8 +36,6 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
   bool _ordenDescendente = false;
 
   double _totalMensual = 0.0;
-  int _pagosVencidos = 0;
-  int _pagosPorVencer = 0; // Próximos 7 días
 
   @override
   void initState() {
@@ -78,7 +76,6 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
 
   void _aplicarFiltros() {
     var filtrados = _pagos;
-    final hoy = DateTime.now();
 
     // Búsqueda por plataforma
     final query = _searchController.text.toLowerCase();
@@ -141,13 +138,6 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
 
     // Calcular estadísticas
     _totalMensual = filtrados.fold(0.0, (sum, p) => sum + p.montoMensual);
-    _pagosVencidos = filtrados
-        .where((p) => p.fechaProximoPago.isBefore(hoy))
-        .length;
-    _pagosPorVencer = filtrados.where((p) {
-      final diasRestantes = p.fechaProximoPago.difference(hoy).inDays;
-      return diasRestantes >= 0 && diasRestantes <= 7;
-    }).length;
 
     setState(() => _pagosFiltrados = filtrados);
   }
@@ -278,51 +268,49 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
           // Header con estadísticas
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(20),
+            // Un poco de padding vertical para que respire
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.red.shade700, Colors.red.shade500],
-              ),
+              // Usamos el color del contenedor primario del tema (usualmente un tono suave del color principal)
+              color: Theme.of(context).colorScheme.primaryContainer,
+              // Opcional: Si quieres que tenga bordes redondeados en la parte inferior
+              // borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
             ),
-            child: Column(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Total Mensual',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'L ${_totalMensual.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                // Lado Izquierdo: Cantidad de pagos
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildStatChip(
-                      'Vencidos',
-                      _pagosVencidos.toString(),
-                      Colors.red.shade900,
+                    Icon(
+                      Icons.receipt_long,
+                      size: 18,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onPrimaryContainer.withOpacity(0.7),
                     ),
-                    _buildStatChip(
-                      'Por Vencer',
-                      _pagosPorVencer.toString(),
-                      Colors.orange.shade900,
-                    ),
-                    _buildStatChip(
-                      'Total',
-                      _pagosFiltrados.length.toString(),
-                      Colors.white24,
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_pagosFiltrados.length} ${_pagosFiltrados.length == 1 ? 'pago' : 'pagos'}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
                     ),
                   ],
+                ),
+
+                // Lado Derecho: Total monetario
+                Text(
+                  // He usado _totalMensual del código original.
+                  // Si quieres que el total cambie según el filtro de búsqueda, usa _totalFiltrado si lo tienes calculado.
+                  'Total: L ${_totalMensual.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ],
             ),
@@ -535,32 +523,6 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
-
-  Widget _buildStatChip(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ==================== PAGO PLATAFORMA CARD ====================
@@ -590,52 +552,55 @@ class _PagoPlataformaCard extends StatelessWidget {
         .difference(DateTime.now())
         .inDays;
 
-    // Determinar color de estado
-    Color estadoColor;
-    Color cardColor;
+    // 1. Lógica de colores idéntica a tu referencia
+    Color urgenciaColor;
     String estadoTexto;
 
     if (diasRestantes < 0) {
-      estadoColor = Colors.red;
-      cardColor = Colors.red.shade50;
+      urgenciaColor = Colors.red.shade400;
       estadoTexto = 'VENCIDO';
+    } else if (diasRestantes == 0) {
+      urgenciaColor = Colors.orange.shade400;
+      estadoTexto = 'HOY';
     } else if (diasRestantes <= 3) {
-      estadoColor = Colors.orange;
-      cardColor = Colors.orange.shade50;
+      urgenciaColor = Colors.amber.shade400;
       estadoTexto = 'URGENTE';
     } else if (diasRestantes <= 7) {
-      estadoColor = Colors.amber;
-      cardColor = Colors.amber.shade50;
+      urgenciaColor = Colors.blue.shade400;
       estadoTexto = 'PRÓXIMO';
     } else {
-      estadoColor = Colors.green;
-      cardColor = Colors.green.shade50;
+      urgenciaColor = Colors.green.shade400;
       estadoTexto = 'AL DÍA';
     }
 
+    // Parseo seguro del color de la plataforma
+    final plataformaColor = Color(
+      int.parse(plataforma.color.replaceFirst('#', '0xFF')),
+    );
+
     return Card(
       elevation: 2,
-      color: cardColor,
+      // IMPORTANTE: Fondo blanco/superficie para que contraste bien con tu fondo oscuro
+      color: Color(
+        int.parse(plataforma.color.replaceFirst('#', '0xFF')),
+      ).withOpacity(0.15),
+      clipBehavior:
+          Clip.antiAlias, // Para que el borde del header se recorte bien
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          // Header con logo
+          // 2. HEADER - Estilo idéntico a la referencia
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Color(
-                int.parse(plataforma.color.replaceFirst('#', '0xFF')),
-              ).withOpacity(0.1),
+              color: plataformaColor.withOpacity(0.15),
               border: Border(
-                bottom: BorderSide(
-                  color: Color(
-                    int.parse(plataforma.color.replaceFirst('#', '0xFF')),
-                  ),
-                  width: 2,
-                ),
+                bottom: BorderSide(color: plataformaColor, width: 2),
               ),
             ),
             child: Row(
               children: [
+                // Asumo que tienes este método o widget
                 _buildLogo(plataforma),
                 const SizedBox(width: 12),
                 Expanded(
@@ -645,35 +610,33 @@ class _PagoPlataformaCard extends StatelessWidget {
                       Text(
                         plataforma.nombre,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: Colors.white,
                         ),
                       ),
                       Text(
                         cuenta.email,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.white),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
+                // Pill de estado (Pill sólida)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
+                    horizontal: 10,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: estadoColor,
+                    color: urgenciaColor,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     estadoTexto,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -683,12 +646,12 @@ class _PagoPlataformaCard extends StatelessWidget {
             ),
           ),
 
-          // Contenido
+          // 3. CONTENIDO
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Monto y fecha
+                // Fila de Monto y Fecha
                 Row(
                   children: [
                     Expanded(
@@ -696,44 +659,44 @@ class _PagoPlataformaCard extends StatelessWidget {
                         'Monto Mensual',
                         'L ${pago.montoMensual.toStringAsFixed(2)}',
                         Icons.attach_money,
-                        Colors.black87,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _buildInfoItem(
                         'Próximo Pago',
                         DateFormat('dd/MM/yyyy').format(pago.fechaProximoPago),
                         Icons.calendar_today,
-                        Colors.black87,
                       ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 12),
 
-                // Días restantes
+                // 4. CAJA DE DÍAS RESTANTES (Estilo copiado exactamente)
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: estadoColor.withOpacity(0.2),
+                    color: urgenciaColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: estadoColor),
+                    border: Border.all(color: urgenciaColor.withOpacity(0.5)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.schedule, color: estadoColor, size: 20),
+                      Icon(Icons.schedule, color: urgenciaColor, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           diasRestantes < 0
                               ? 'Vencido hace ${diasRestantes.abs()} días'
                               : diasRestantes == 0
-                              ? 'Vence hoy'
-                              : 'En $diasRestantes días',
+                              ? 'Vence HOY'
+                              : 'Vence en $diasRestantes días',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: estadoColor.withOpacity(0.9),
+                            color: urgenciaColor,
+                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -741,96 +704,112 @@ class _PagoPlataformaCard extends StatelessWidget {
                         'Día ${pago.diaPagoMes}',
                         style: TextStyle(
                           fontSize: 12,
+                          color: urgenciaColor.withOpacity(0.8),
                           fontWeight: FontWeight.w500,
-                          color: estadoColor.withOpacity(0.8),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                if (pago.fechaUltimoPago != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.shade200),
-                    ),
-                    child: Row(
+                // Info extra (Último pago y Notas) - Diseño sutil
+                if (pago.fechaUltimoPago != null ||
+                    (pago.notas?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 12),
+                  if (pago.fechaUltimoPago != null)
+                    Row(
                       children: [
                         Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: Colors.blue.shade700,
+                          Icons.check_circle_outline,
+                          size: 14,
+                          color: Colors.green[700],
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         Text(
                           'Último pago: ${DateFormat('dd/MM/yyyy').format(pago.fechaUltimoPago!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue.shade900,
-                          ),
+                          style: TextStyle(fontSize: 11, color: Colors.white),
                         ),
                       ],
                     ),
-                  ),
-                ],
-
-                if (pago.notas?.isNotEmpty == true) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      pago.notas!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black87,
+                  if (pago.notas?.isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey[200]!),
                       ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 12),
-                // Botones
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: onPagar,
-                      icon: const Icon(Icons.payment, size: 18),
-                      label: const Text('Pagar'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                      child: Text(
+                        pago.notas!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[800],
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
-                    OutlinedButton.icon(
+                  ],
+                ],
+
+                const SizedBox(height: 16),
+
+                // 5. BOTONES DE ACCIÓN
+                // Botón principal grande (Pagar)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onPagar,
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: const Text('Registrar Pago'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Botones secundarios (Historial, Editar, Borrar) en una fila limpia
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton.icon(
                       onPressed: onHistorial,
-                      icon: const Icon(Icons.history, size: 18),
-                      label: const Text('Historial'),
+                      icon: const Icon(Icons.history, size: 16),
+                      label: const Text(
+                        'Historial',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                    TextButton.icon(
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Editar'),
-                    ),
-                    TextButton.icon(
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete, size: 18),
-                      label: const Text('Eliminar'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: onEdit,
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          color: Colors.blue[700],
+                          tooltip: 'Editar',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          color: Colors.red[700],
+                          tooltip: 'Eliminar',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -846,6 +825,8 @@ class _PagoPlataformaCard extends StatelessWidget {
     final logos = {
       'Netflix':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Mega Premium - Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
       'Disney+':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/330px-Disney%2B_logo.svg.png',
       'HBO':
@@ -855,15 +836,21 @@ class _PagoPlataformaCard extends StatelessWidget {
       'Max':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
       'Prime Video':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Prime_Video.svg/330px-Prime_Video.svg.png',
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
       'Spotify':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
-      'YouTube':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/159px-YouTube_full-color_icon_%282017%29.svg.png',
+      'YouTube Premium':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
       'Paramount+':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
       'Apple TV+':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
+      'Vix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
+      'Viki':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
+      'Crunchyroll':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
     };
 
     final logoUrl = logos[plataforma.nombre];
@@ -897,39 +884,34 @@ class _PagoPlataformaCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoItem(
-    String label,
-    String value,
-    IconData icon,
-    Color textColor,
-  ) {
+  // Helper idéntico al de tu referencia
+  Widget _buildInfoItem(String label, String value, IconData icon) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(icon, size: 14, color: Colors.grey[600]),
+            Icon(icon, size: 12, color: Colors.grey[400]),
             const SizedBox(width: 4),
             Text(
               label,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 10, color: Colors.grey[400]),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 14,
+          style: const TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.bold,
-            color: textColor,
+            color: Colors.white, // Color fuerte para contraste sobre blanco
           ),
         ),
       ],
     );
   }
 }
-
 // ==================== FILTROS AVANZADOS DIALOG ====================
 
 class FiltrosAvanzadosDialog extends StatefulWidget {

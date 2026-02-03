@@ -492,7 +492,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                             Expanded(
                               child: Text(
                                 '${clienteAsignado.nombreCompleto} • ${clienteAsignado.telefono}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[800]),
+                                style: TextStyle(fontSize: 12, color: Colors.white),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),

@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../models/pago.dart';
 import '../../models/cliente.dart';
@@ -19,10 +21,10 @@ class _GestionPagosClientesScreenState
     extends State<GestionPagosClientesScreen> {
   final _supabaseService = SupabaseService();
 
-  List<Pago> _pagos = [];
-  List<Pago> _pagosFiltrados = [];
+  
   List<Cliente> _clientes = [];
   List<Suscripcion> _suscripciones = [];
+  List<Suscripcion> _suscripcionesFiltradas = [];
   List<Plataforma> _plataformas = [];
 
   bool _isLoading = true;
@@ -39,7 +41,6 @@ class _GestionPagosClientesScreenState
   String _ordenarPor = 'fecha_pago';
   bool _ordenDescendente = true;
 
-  double _totalFiltrado = 0.0;
 
   @override
   void initState() {
@@ -57,15 +58,15 @@ class _GestionPagosClientesScreenState
     setState(() => _isLoading = true);
 
     try {
-      final pagos = await _supabaseService.obtenerPagos();
       final clientes = await _supabaseService.obtenerClientes();
       final suscripciones = await _supabaseService.obtenerSuscripciones();
       final plataformas = await _supabaseService.obtenerPlataformas();
 
       setState(() {
-        _pagos = pagos;
         _clientes = clientes;
-        _suscripciones = suscripciones;
+        _suscripciones = suscripciones
+            .where((s) => s.estado == 'activa')
+            .toList();
         _plataformas = plataformas;
         _aplicarFiltros();
       });
@@ -81,14 +82,14 @@ class _GestionPagosClientesScreenState
   }
 
   void _aplicarFiltros() {
-    var filtrados = _pagos;
+    var filtradas = _suscripciones;
 
-    // Búsqueda por texto (cliente nombre o teléfono sin guiones)
+    // Búsqueda por texto
     final query = _searchController.text.toLowerCase().replaceAll('-', '');
     if (query.isNotEmpty) {
-      filtrados = filtrados.where((p) {
+      filtradas = filtradas.where((s) {
         final cliente = _clientes.firstWhere(
-          (c) => c.id == p.clienteId,
+          (c) => c.id == s.clienteId,
           orElse: () => Cliente(
             id: '',
             nombreCompleto: '',
@@ -97,109 +98,29 @@ class _GestionPagosClientesScreenState
             fechaRegistro: DateTime.now(),
           ),
         );
-
-        final telefonoSinGuiones = cliente.telefono.replaceAll('-', '');
-
         return cliente.nombreCompleto.toLowerCase().contains(query) ||
-            telefonoSinGuiones.toLowerCase().contains(query);
+            cliente.telefono.replaceAll('-', '').contains(query);
       }).toList();
     }
 
     // Filtro por cliente
     if (_filtroCliente != 'todos') {
-      filtrados = filtrados
-          .where((p) => p.clienteId == _filtroCliente)
+      filtradas = filtradas
+          .where((s) => s.clienteId == _filtroCliente)
           .toList();
     }
 
-    // Filtro por método de pago
-    if (_filtroMetodoPago != 'todos') {
-      filtrados = filtrados
-          .where((p) => p.metodoPago == _filtroMetodoPago)
-          .toList();
-    }
-
-    // Filtro por plataforma (nuevo)
+    // Filtro por plataforma
     if (_filtroPlataforma != 'todas') {
-      filtrados = filtrados.where((p) {
-        final suscripcion = _suscripciones.firstWhere(
-          (s) => s.id == p.suscripcionId,
-          orElse: () => Suscripcion(
-            id: '',
-            clienteId: '',
-            perfilId: '',
-            plataformaId: '',
-            tipoSuscripcion: '',
-            precio: 0,
-            fechaInicio: DateTime.now(),
-            fechaProximoPago: DateTime.now(),
-            fechaLimitePago: DateTime.now(),
-            estado: '',
-            fechaCreacion: DateTime.now(),
-          ),
-        );
-        return suscripcion.plataformaId == _filtroPlataforma;
-      }).toList();
-    }
-
-    // Filtro por rango de fechas
-    if (_fechaDesde != null) {
-      filtrados = filtrados
-          .where(
-            (p) =>
-                p.fechaPago.isAfter(_fechaDesde!) ||
-                p.fechaPago.isAtSameMomentAs(_fechaDesde!),
-          )
+      filtradas = filtradas
+          .where((s) => s.plataformaId == _filtroPlataforma)
           .toList();
     }
 
-    if (_fechaHasta != null) {
-      final hastaFin = DateTime(
-        _fechaHasta!.year,
-        _fechaHasta!.month,
-        _fechaHasta!.day,
-        23,
-        59,
-        59,
-      );
-      filtrados = filtrados
-          .where(
-            (p) =>
-                p.fechaPago.isBefore(hastaFin) ||
-                p.fechaPago.isAtSameMomentAs(hastaFin),
-          )
-          .toList();
-    }
+    // Ordenar por fecha próximo pago (más cercano primero)
+    filtradas.sort((a, b) => a.fechaProximoPago.compareTo(b.fechaProximoPago));
 
-    // Ordenamiento
-    filtrados.sort((a, b) {
-      int comparison = 0;
-
-      switch (_ordenarPor) {
-        case 'fecha_pago':
-          comparison = a.fechaPago.compareTo(b.fechaPago);
-          break;
-        case 'cliente':
-          final clienteA = _clientes
-              .firstWhere((c) => c.id == a.clienteId)
-              .nombreCompleto;
-          final clienteB = _clientes
-              .firstWhere((c) => c.id == b.clienteId)
-              .nombreCompleto;
-          comparison = clienteA.compareTo(clienteB);
-          break;
-        case 'monto':
-          comparison = a.monto.compareTo(b.monto);
-          break;
-      }
-
-      return _ordenDescendente ? -comparison : comparison;
-    });
-
-    // Calcular total
-    _totalFiltrado = filtrados.fold(0.0, (sum, p) => sum + p.monto);
-
-    setState(() => _pagosFiltrados = filtrados);
+    setState(() => _suscripcionesFiltradas = filtradas);
   }
 
   void _limpiarFiltros() {
@@ -267,51 +188,6 @@ class _GestionPagosClientesScreenState
     }
   }
 
-  Future<void> _eliminarPago(Pago pago) async {
-    final cliente = _clientes.firstWhere((c) => c.id == pago.clienteId);
-
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar Pago'),
-        content: Text(
-          '¿Estás seguro de eliminar el pago de "${cliente.nombreCompleto}"?\n\n'
-          'Monto: L ${pago.monto.toStringAsFixed(2)}\n'
-          'Esta acción no se puede deshacer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        await _supabaseService.eliminarPago(pago.id);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Pago eliminado')));
-          _cargarDatos();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -325,23 +201,34 @@ class _GestionPagosClientesScreenState
               color: Theme.of(context).colorScheme.primaryContainer,
             ),
             child: Row(
+              //detalle cuentas cobrasdas
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${_pagosFiltrados.length} ${_pagosFiltrados.length == 1 ? 'pago' : 'pagos'}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Pagos Pendientes',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'L ${_suscripcionesFiltradas.fold(0.0, (sum, s) => sum + s.precio).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Total: L ${_totalFiltrado.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
+                Icon(
+                  Icons.account_balance_wallet,
+                  size: 32,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
                 ),
               ],
             ),
@@ -491,7 +378,7 @@ class _GestionPagosClientesScreenState
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _pagosFiltrados.isEmpty
+                : _suscripcionesFiltradas.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -503,16 +390,16 @@ class _GestionPagosClientesScreenState
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _pagos.isEmpty
-                              ? 'No hay pagos registrados'
-                              : 'No se encontraron pagos',
+                          _suscripciones.isEmpty
+                              ? 'No hay pagos pendientes'
+                              : 'No se encontraron pagos pendientes',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _pagos.isEmpty
-                              ? 'Registra tu primer pago'
+                          _suscripciones.isEmpty
+                              ? 'Registra tu primer cobro'
                               : 'Intenta con otros filtros',
                           style: TextStyle(color: Colors.grey[600]),
                         ),
@@ -523,29 +410,14 @@ class _GestionPagosClientesScreenState
                     onRefresh: _cargarDatos,
                     child: ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _pagosFiltrados.length,
+                      itemCount: _suscripcionesFiltradas.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final pago = _pagosFiltrados[index];
+                        final suscripcion = _suscripcionesFiltradas[index];
                         final cliente = _clientes.firstWhere(
-                          (c) => c.id == pago.clienteId,
+                          (c) => c.id == suscripcion.clienteId,
                         );
-                        final suscripcion = _suscripciones.firstWhere(
-                          (s) => s.id == pago.suscripcionId,
-                          orElse: () => Suscripcion(
-                            id: '',
-                            clienteId: '',
-                            perfilId: '',
-                            plataformaId: '',
-                            tipoSuscripcion: '',
-                            precio: 0,
-                            fechaInicio: DateTime.now(),
-                            fechaProximoPago: DateTime.now(),
-                            fechaLimitePago: DateTime.now(),
-                            estado: '',
-                            fechaCreacion: DateTime.now(),
-                          ),
-                        );
+
                         final plataforma = _plataformas.firstWhere(
                           (p) => p.id == suscripcion.plataformaId,
                           orElse: () => Plataforma(
@@ -560,14 +432,12 @@ class _GestionPagosClientesScreenState
                           ),
                         );
 
-                        return _PagoCard(
-                          pago: pago,
+                        return _ProximoCobroCard(
+                          suscripcion: suscripcion,
                           cliente: cliente,
                           plataforma: plataforma,
                           onCobrar: () =>
                               _mostrarDialogoPago(null, suscripcion),
-                          onEdit: () => _mostrarDialogoPago(pago),
-                          onDelete: () => _eliminarPago(pago),
                         );
                       },
                     ),
@@ -589,66 +459,69 @@ class _GestionPagosClientesScreenState
 
 // ==================== PAGO CARD ====================
 
-class _PagoCard extends StatelessWidget {
-  final Pago pago;
+class _ProximoCobroCard extends StatelessWidget {
+  final Suscripcion suscripcion;
   final Cliente cliente;
   final Plataforma plataforma;
   final VoidCallback onCobrar;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
 
-  const _PagoCard({
-    required this.pago,
+  const _ProximoCobroCard({
+    required this.suscripcion,
     required this.cliente,
     required this.plataforma,
     required this.onCobrar,
-    required this.onEdit,
-    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Color según método de pago
-    Color metodoPagoColor;
-    IconData metodoPagoIcon;
+    final diasRestantes = suscripcion.fechaProximoPago
+        .difference(DateTime.now())
+        .inDays;
 
-    switch (pago.metodoPago) {
-      case 'efectivo':
-        metodoPagoColor = Colors.green;
-        metodoPagoIcon = Icons.money;
-        break;
-      case 'transferencia':
-        metodoPagoColor = Colors.blue;
-        metodoPagoIcon = Icons.account_balance;
-        break;
-      case 'deposito':
-        metodoPagoColor = Colors.orange;
-        metodoPagoIcon = Icons.atm;
-        break;
-      default:
-        metodoPagoColor = Colors.grey;
-        metodoPagoIcon = Icons.payment;
+    // Colores según urgencia
+    Color urgenciaColor;
+    String estadoTexto;
+
+    if (diasRestantes < 0) {
+      urgenciaColor = Colors.red.shade400;
+      estadoTexto = 'VENCIDO';
+    } else if (diasRestantes == 0) {
+      urgenciaColor = Colors.orange.shade400;
+      estadoTexto = 'HOY';
+    } else if (diasRestantes <= 3) {
+      urgenciaColor = Colors.amber.shade400;
+      estadoTexto = 'URGENTE';
+    } else if (diasRestantes <= 7) {
+      urgenciaColor = Colors.blue.shade400;
+      estadoTexto = 'PRÓXIMO';
+    } else {
+      urgenciaColor = Colors.green.shade400;
+      estadoTexto = 'AL DÍA';
     }
 
     return Card(
       elevation: 2,
-      color: Colors.green.shade50, // Fondo verde claro para pagos
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.green.shade100,
-                  child: Icon(
-                    Icons.check_circle,
-                    color: Colors.green.shade700,
-                    size: 28,
+      child: Column(
+        children: [
+          // Header - MANTENER ESTILO EXACTO
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Color(
+                int.parse(plataforma.color.replaceFirst('#', '0xFF')),
+              ).withOpacity(0.15),
+              border: Border(
+                bottom: BorderSide(
+                  color: Color(
+                    int.parse(plataforma.color.replaceFirst('#', '0xFF')),
                   ),
+                  width: 2,
                 ),
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildLogo(plataforma),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -659,181 +532,207 @@ class _PagoCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      //numero de celular del cliente
-                      Text(
-                        cliente.telefono,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black54,
                         ),
                       ),
                       Text(
                         plataforma.nombre,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black54,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: urgenciaColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    estadoTexto,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Contenido
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildInfoItem(
+                        'Próximo Pago',
+                        DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(suscripcion.fechaProximoPago),
+                        Icons.calendar_today,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildInfoItem(
+                        'Monto',
+                        'L ${suscripcion.precio.toStringAsFixed(2)}',
+                        Icons.attach_money,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // NUEVO: Días restantes
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: urgenciaColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: urgenciaColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule, color: urgenciaColor, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          diasRestantes < 0
+                              ? 'Vencido hace ${diasRestantes.abs()} días'
+                              : diasRestantes == 0
+                              ? 'Vence HOY'
+                              : 'En $diasRestantes días',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: urgenciaColor,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Monto destacado
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'L ${pago.monto.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(pago.fechaPago),
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
 
-            // Detalles
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoRow(
-                    'Método de Pago',
-                    _getMetodoPagoTexto(pago.metodoPago),
-                    metodoPagoIcon,
-                    metodoPagoColor,
-                  ),
-                ),
-                if (pago.referencia?.isNotEmpty == true)
-                  Expanded(
-                    child: _buildInfoRow(
-                      'Referencia',
-                      pago.referencia!,
-                      Icons.confirmation_number,
-                      Colors.black54,
-                    ),
-                  ),
-              ],
-            ),
-
-            if (pago.notas?.isNotEmpty == true) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.note, size: 16, color: Colors.blue),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        pago.notas!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 12),
-            // Acciones
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                FilledButton.icon(
-                  onPressed: onCobrar,
-                  icon: const Icon(Icons.payments, size: 18),
-                  label: const Text('Cobrar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                const SizedBox(height: 10),
+                // Botón cobrar - MANTENER ESTILO
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onCobrar,
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: const Text('Cobrar'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                  label: const Text('Editar'),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                  label: const Text('Eliminar'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon, Color color) {
-    return Row(
+  Widget _buildInfoItem(String label, String value, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+        Row(
+          children: [
+            Icon(icon, size: 12, color: Colors.grey[400]),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
         ),
       ],
     );
   }
 
-  String _getMetodoPagoTexto(String metodo) {
-    switch (metodo) {
-      case 'efectivo':
-        return 'Efectivo';
-      case 'transferencia':
-        return 'Transferencia';
-      case 'deposito':
-        return 'Depósito';
-      case 'otro':
-        return 'Otro';
-      default:
-        return metodo;
+  // MÉTODO _buildLogo - Agregar dentro de la clase _ProximoCobroCard (o _PagoCard)
+  // Ubicación: Después del método _buildInfoItem
+
+  Widget _buildLogo(Plataforma plataforma) {
+    // Mapa de logos de plataformas conocidas
+    final logos = {
+      'Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Mega Premium - Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Disney+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/330px-Disney%2B_logo.svg.png',
+      'HBO':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/330px-HBO_logo.svg.png',
+      'HBO Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Prime Video':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
+      'Spotify':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
+      'YouTube Premium':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
+      'Paramount+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
+      'Apple TV+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
+      'Vix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
+      'Viki':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
+      'Crunchyroll':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
+    };
+
+    final logoUrl = logos[plataforma.nombre];
+
+    if (logoUrl != null) {
+      // Si existe logo, mostrarlo
+      return Container(
+        width: 40,
+        height: 40,
+        padding: const EdgeInsets.all(4),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
+        child: CachedNetworkImage(
+          imageUrl: logoUrl,
+          fit: BoxFit.contain,
+          errorWidget: (_, __, ___) =>
+              const FaIcon(FontAwesomeIcons.tv, size: 16, color: Colors.grey),
+        ),
+      );
     }
+
+    // Fallback: círculo con color de plataforma
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Color(int.parse(plataforma.color.replaceFirst('#', '0xFF'))),
+        shape: BoxShape.circle,
+      ),
+      child: const FaIcon(FontAwesomeIcons.tv, size: 16, color: Colors.white),
+    );
   }
 }
 // ==================== FILTROS AVANZADOS DIALOG ====================

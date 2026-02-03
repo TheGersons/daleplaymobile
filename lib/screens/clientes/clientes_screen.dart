@@ -307,8 +307,22 @@ class _ClientesScreenState extends State<ClientesScreen> {
                               cliente.telefono,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: Colors.white,
                               ),
+                            ),
+                            //agregamos un boton para copiar el telefono
+                            IconButton(
+                              icon: Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Colors.blue,
+                              ),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: cliente.telefono));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Teléfono copiado al portapapeles')),
+                                );
+                              },
                             ),
                           ],
                         ),
