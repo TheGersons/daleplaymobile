@@ -1,3 +1,4 @@
+import 'package:daleplay/screens/cuentas/cuenta_detalle_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,8 @@ import '../../models/cuenta_correo.dart';
 import '../../models/plataforma.dart';
 import '../../models/perfil.dart';
 import '../../services/supabase_service.dart';
+import '../../models/cliente.dart';
+import '../../models/suscripcion.dart';
 
 class CuentasScreen extends StatefulWidget {
   const CuentasScreen({super.key});
@@ -21,6 +24,8 @@ class _CuentasScreenState extends State<CuentasScreen> {
   List<CuentaCorreo> _cuentasFiltradas = [];
   List<Plataforma> _plataformas = [];
   List<Perfil> _perfiles = [];
+  List<Cliente> _clientes = [];
+List<Suscripcion> _suscripciones = [];
   bool _isLoading = true;
 
   // Filtros básicos
@@ -46,20 +51,24 @@ class _CuentasScreenState extends State<CuentasScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    try {
-      final cuentas = await _supabaseService.obtenerCuentas();
-      final plataformas = await _supabaseService.obtenerPlataformas();
-      final perfiles = await _supabaseService.obtenerPerfiles();
+  try {
+    final cuentas = await _supabaseService.obtenerCuentas();
+    final plataformas = await _supabaseService.obtenerPlataformas();
+    final perfiles = await _supabaseService.obtenerPerfiles();
+    final clientes = await _supabaseService.obtenerClientes();
+    final suscripciones = await _supabaseService.obtenerSuscripciones();
 
-      setState(() {
-        _cuentas = cuentas;
-        _plataformas = plataformas;
-        _perfiles = perfiles;
-        _aplicarFiltros();
-      });
-    } catch (e) {
+    setState(() {
+      _cuentas = cuentas;
+      _plataformas = plataformas;
+      _perfiles = perfiles;
+      _clientes = clientes;
+      _suscripciones = suscripciones;
+      _aplicarFiltros();
+    });
+  } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -178,6 +187,25 @@ class _CuentasScreenState extends State<CuentasScreen> {
       ),
     );
   }
+
+ 
+
+  void _mostrarDetalleCuenta(CuentaCorreo cuenta) {
+  showDialog(
+    context: context,
+    builder: (context) => CuentaDetalleDialog(
+      cuenta: cuenta,
+      plataforma: _plataformas.firstWhere((p) => p.id == cuenta.plataformaId),
+      perfiles: _perfiles.where((p) => p.cuentaId == cuenta.id).toList(),
+      clientes: _clientes,
+      suscripciones: _suscripciones,
+      onEditar: () {
+        Navigator.pop(context);
+        _mostrarDialogoCuenta(cuenta);
+      },
+    ),
+  );
+}
 
   Future<void> _eliminarCuenta(CuentaCorreo cuenta) async {
     // Verificar si tiene perfiles
@@ -451,6 +479,7 @@ class _CuentasScreenState extends State<CuentasScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_cuentas",
         onPressed: () => _mostrarDialogoCuenta(),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Cuenta'),
@@ -472,14 +501,15 @@ class _CuentasScreenState extends State<CuentasScreen> {
         .length;
 
     return _CuentaCard(
-      cuenta: cuenta,
-      plataforma: plataforma,
-      perfilesDisponibles: perfilesDisponibles,
-      perfilesOcupados: perfilesOcupados,
-      perfilesTotal: perfiles.length,
-      onEdit: () => _mostrarDialogoCuenta(cuenta),
-      onDelete: () => _eliminarCuenta(cuenta),
-    );
+  cuenta: cuenta,
+  plataforma: plataforma,
+  perfilesDisponibles: perfilesDisponibles,
+  perfilesOcupados: perfilesOcupados,
+  perfilesTotal: perfiles.length,
+  onTap: () => _mostrarDetalleCuenta(cuenta),
+  onEdit: () => _mostrarDialogoCuenta(cuenta),
+  onDelete: () => _eliminarCuenta(cuenta),
+);
   }
 }
 
@@ -491,6 +521,7 @@ class _CuentaCard extends StatefulWidget {
   final int perfilesDisponibles;
   final int perfilesOcupados;
   final int perfilesTotal;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -500,6 +531,7 @@ class _CuentaCard extends StatefulWidget {
     required this.perfilesDisponibles,
     required this.perfilesOcupados,
     required this.perfilesTotal,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
@@ -518,225 +550,229 @@ class _CuentaCardState extends State<_CuentaCard> {
     );
 
     return Card(
-      child: Column(
-        children: [
-          // Header con logo
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorPlataforma.withOpacity(0.1),
-              border: Border(
-                bottom: BorderSide(color: colorPlataforma, width: 2),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          children: [
+            // Header con logo
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorPlataforma.withOpacity(0.1),
+                border: Border(
+                  bottom: BorderSide(color: colorPlataforma, width: 2),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                _buildLogo(widget.plataforma),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.plataforma.nombre,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        DateFormat(
-                          'dd/MM/yyyy',
-                        ).format(widget.cuenta.fechaCreacion),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.cuenta.estado == 'activo'
-                        ? Colors.green[50]
-                        : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: widget.cuenta.estado == 'activo'
-                          ? Colors.green
-                          : Colors.grey,
-                    ),
-                  ),
-                  child: Text(
-                    widget.cuenta.estado == 'activo' ? 'activo' : 'Inactivo',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: widget.cuenta.estado == 'activo'
-                          ? Colors.green[700]
-                          : Colors.grey[700],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Contenido
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Email
-                Row(
-                  children: [
-                    const Icon(Icons.email, size: 18, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        widget.cuenta.email,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 18),
-                      onPressed: () {
-                        Clipboard.setData(
-                          ClipboardData(text: widget.cuenta.email),
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Email copiado'),
-                            duration: Duration(seconds: 1),
+              child: Row(
+                children: [
+                  _buildLogo(widget.plataforma),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.plataforma.nombre,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                        );
-                      },
-                      tooltip: 'Copiar email',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Password
-                Row(
-                  children: [
-                    const Icon(Icons.lock, size: 18, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _mostrarPassword
-                            ? widget.cuenta.password
-                            : '•' * widget.cuenta.password.length,
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        _mostrarPassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        size: 18,
-                      ),
-                      onPressed: () =>
-                          setState(() => _mostrarPassword = !_mostrarPassword),
-                      tooltip: _mostrarPassword ? 'Ocultar' : 'Mostrar',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 18),
-                      onPressed: () {
-                        Clipboard.setData(
-                          ClipboardData(text: widget.cuenta.password),
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Contraseña copiada'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                      tooltip: 'Copiar contraseña',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Perfiles
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.people, size: 20, color: Colors.blue[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Perfiles: ${widget.perfilesTotal}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue[900],
-                              ),
-                            ),
-                            Text(
-                              'Disponibles: ${widget.perfilesDisponibles} • Ocupados: ${widget.perfilesOcupados}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.blue[800],
-                              ),
-                            ),
-                          ],
                         ),
-                      ),
-                    ],
+                        Text(
+                          DateFormat(
+                            'dd/MM/yyyy',
+                          ).format(widget.cuenta.fechaCreacion),
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                if (widget.cuenta.notas?.isNotEmpty == true) ...[
-                  const SizedBox(height: 12),
                   Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
+                      color: widget.cuenta.estado == 'activo'
+                          ? Colors.green[50]
+                          : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: widget.cuenta.estado == 'activo'
+                            ? Colors.green
+                            : Colors.grey,
+                      ),
                     ),
                     child: Text(
-                      widget.cuenta.notas!,
-                      style: const TextStyle(fontSize: 13),
+                      widget.cuenta.estado == 'activo' ? 'activo' : 'Inactivo',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: widget.cuenta.estado == 'activo'
+                            ? Colors.green[700]
+                            : Colors.grey[700],
+                      ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: widget.onEdit,
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Editar'),
+              ),
+            ),
+        
+            // Contenido
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Email
+                  Row(
+                    children: [
+                      const Icon(Icons.email, size: 18, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.cuenta.email,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(text: widget.cuenta.email),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Email copiado'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        tooltip: 'Copiar email',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Password
+                  Row(
+                    children: [
+                      const Icon(Icons.lock, size: 18, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _mostrarPassword
+                              ? widget.cuenta.password
+                              : '•' * widget.cuenta.password.length,
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          _mostrarPassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          size: 18,
+                        ),
+                        onPressed: () =>
+                            setState(() => _mostrarPassword = !_mostrarPassword),
+                        tooltip: _mostrarPassword ? 'Ocultar' : 'Mostrar',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(text: widget.cuenta.password),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Contraseña copiada'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        tooltip: 'Copiar contraseña',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Perfiles
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
                     ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: widget.onDelete,
-                      icon: const Icon(Icons.delete, size: 18),
-                      label: const Text('Eliminar'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: Row(
+                      children: [
+                        Icon(Icons.people, size: 20, color: Colors.blue[700]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Perfiles: ${widget.perfilesTotal}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue[900],
+                                ),
+                              ),
+                              Text(
+                                'Disponibles: ${widget.perfilesDisponibles} • Ocupados: ${widget.perfilesOcupados}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.cuenta.notas?.isNotEmpty == true) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        widget.cuenta.notas!,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
                   ],
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: widget.onEdit,
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Editar'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.delete, size: 18),
+                        label: const Text('Eliminar'),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1023,26 +1059,44 @@ class _CuentaDialogState extends State<CuentaDialog> {
       );
 
       if (widget.cuenta == null) {
-        await _supabaseService.crearCuenta(cuenta);
-      } else {
-        await _supabaseService.actualizarCuenta(cuenta);
-      }
+        // CREAR: Auto-crea perfiles
+        final cuentaId = await _supabaseService.crearCuenta(cuenta);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.cuenta == null ? 'Cuenta creada' : 'Cuenta actualizada',
+        if (mounted) {
+          // Obtener plataforma para mostrar cuántos perfiles se crearon
+          final plataforma = widget.plataformas.firstWhere(
+            (p) => p.id == _plataformaSeleccionada,
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Cuenta creada con ${plataforma.maxPerfiles} perfiles disponibles',
+              ),
+              backgroundColor: Colors.green,
             ),
-          ),
-        );
-        widget.onGuardar();
+          );
+          widget.onGuardar();
+        }
+      } else {
+        // EDITAR: Valida cambio de plataforma automáticamente
+        await _supabaseService.actualizarCuenta(cuenta);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cuenta actualizada'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          widget.onGuardar();
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       if (mounted) {

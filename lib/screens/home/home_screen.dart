@@ -1,9 +1,10 @@
+import 'package:daleplay/widgets/badge_alertas_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../perfiles/perfiles_screen.dart';
-import '../pagos/gestion_pagos_clientes_screen.dart';
+import '../recordatorios/recordatorios_pago_screen.dart';
 import '../reportes/reportes_screen.dart';
 import '../plataformas/plataformas_screen.dart';
 import '../cuentas/cuentas_screen.dart';
@@ -40,11 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentTitle = 'Inicio';
           break;
         case 1:
-          _currentScreen = const PerfilesScreen();
-          _currentTitle = 'Perfiles';
+          _currentScreen = const SuscripcionesScreen();
+          _currentTitle = 'Suscripciones';
           break;
         case 3:
-          _currentScreen = const GestionPagosClientesScreen();
+          _currentScreen = const RecordatoriosPagoScreen();
           _currentTitle = 'Gestión de Cobros';
           break;
         case 4:
@@ -130,6 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_currentTitle),
         actions: [
+          const BadgeAlertas(), // Badge de alertas
+          const SizedBox(width: 8),
           // Usuario info
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -171,8 +174,10 @@ class _HomeScreenState extends State<HomeScreen> {
       drawer: _buildDrawer(context, userProvider),
       body: _currentScreen,
       floatingActionButton: Padding(
+        
         padding: const EdgeInsets.only(top: 80.0),
         child: FloatingActionButton(
+          heroTag: "fab_principal_app",
           onPressed: _crearSuscripcionRapida,
           elevation: 4,
           child: const Icon(Icons.add),
@@ -192,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: 'Perfiles',
+            label: 'Suscripción',
           ),
           NavigationDestination(icon: SizedBox(width: 48), label: ''),
           NavigationDestination(
@@ -328,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.payments,
             title: 'Gestión de Cobros',
             onTap: () => _navigateToScreen(
-              const GestionPagosClientesScreen(),
+              const RecordatoriosPagoScreen(),
               'Gestión de Cobros',
               bottomNavIndex: 3,
             ),

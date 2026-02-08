@@ -1,6 +1,7 @@
 import 'package:daleplay/models/alerta.dart';
 import 'package:daleplay/models/configuracion.dart';
 import 'package:daleplay/models/pago.dart';
+import 'package:daleplay/models/recordatorio_pago.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 import 'package:dbcrypt/dbcrypt.dart';
 import '../models/auth_user.dart';
@@ -50,6 +51,20 @@ class SupabaseService {
 
   // ==================== PLATAFORMAS ====================
 
+  Future<Plataforma> obtenerPlataformaPorId(String id) async {
+    try {
+      final response = await _client
+          .from('plataformas')
+          .select()
+          .eq('id', id)
+          .single();
+
+      return Plataforma.fromJson(response);
+    } catch (e) {
+      throw Exception('Error al obtener plataforma: $e');
+    }
+  }
+
   Future<List<Plataforma>> obtenerPlataformas() async {
     try {
       final response = await _client
@@ -67,7 +82,9 @@ class SupabaseService {
 
   Future<void> crearPlataforma(Plataforma plataforma) async {
     try {
-      await _client.from('plataformas').insert(plataforma.toJson());
+      final json = plataforma.toJson();
+      json.remove('id'); // Dejar que Supabase genere el ID
+      await _client.from('plataformas').insert(json);
     } catch (e) {
       throw Exception('Error al crear plataforma: $e');
     }
@@ -86,7 +103,7 @@ class SupabaseService {
 
   Future<void> eliminarPlataforma(String id) async {
     return;
-    
+
     /*try {
       await _client.from('plataformas').delete().eq('id', id);
     } catch (e) {
@@ -161,7 +178,9 @@ class SupabaseService {
 
   Future<void> crearSuscripcion(Suscripcion suscripcion) async {
     try {
-      await _client.from('suscripciones').insert(suscripcion.toJson());
+      final json = suscripcion.toJson();
+      json.remove('id'); // Dejar que Supabase genere el ID
+      await _client.from('suscripciones').insert(json);
     } catch (e) {
       throw Exception('Error al crear suscripción: $e');
     }
@@ -180,7 +199,10 @@ class SupabaseService {
 
   Future<void> eliminarSuscripcion(String id) async {
     try {
-      await _client.from('suscripciones').delete().eq('id', id);
+      await _client
+          .from('suscripciones')
+          .update({'deleted_at': DateTime.now().toIso8601String()})
+          .eq('id', id);
     } catch (e) {
       throw Exception('Error al eliminar suscripción: $e');
     }
@@ -220,13 +242,39 @@ class SupabaseService {
     }
   }
 
-  Future<void> crearCuenta(CuentaCorreo cuenta) async {
+  Future<String> crearCuenta(CuentaCorreo cuenta) async {
     try {
-      // Excluimos 'id' para que Supabase lo genere, o lo mandamos si lo generas localmente
+      // 1. Obtener plataforma para saber max_perfiles
+      final plataforma = await obtenerPlataformaPorId(cuenta.plataformaId);
+
+      // 2. Insertar cuenta
       final json = cuenta.toJson();
       json.remove('id');
-      
-      await _client.from('cuentas_correo').insert(json);
+
+      final response = await _client
+          .from('cuentas_correo')
+          .insert(json)
+          .select()
+          .single();
+
+      final cuentaId = response['id'] as String;
+
+      // 3. AUTO-CREAR PERFILES según max_perfiles de la plataforma
+      final perfilesACrear = <Map<String, dynamic>>[];
+
+      for (int i = 1; i <= plataforma.maxPerfiles; i++) {
+        perfilesACrear.add({
+          'cuenta_id': cuentaId,
+          'nombre_perfil': 'Perfil $i',
+          'pin': null,
+          'estado': 'disponible',
+          'fecha_creacion': DateTime.now().toIso8601String(),
+        });
+      }
+
+      await _client.from('perfiles').insert(perfilesACrear);
+
+      return cuentaId;
     } catch (e) {
       throw Exception('Error al crear cuenta: $e');
     }
@@ -234,6 +282,32 @@ class SupabaseService {
 
   Future<void> actualizarCuenta(CuentaCorreo cuenta) async {
     try {
+      // Obtener cuenta actual
+      final cuentaActual = await _client
+          .from('cuentas_correo')
+          .select()
+          .eq('id', cuenta.id)
+          .single();
+
+      final plataformaActualId = cuentaActual['plataforma_id'] as String;
+
+      // Si cambió de plataforma, validar
+      if (plataformaActualId != cuenta.plataformaId) {
+        final perfilesOcupados = await contarPerfilesOcupados(cuenta.id);
+        final nuevaPlataforma = await obtenerPlataformaPorId(
+          cuenta.plataformaId,
+        );
+
+        if (perfilesOcupados > nuevaPlataforma.maxPerfiles) {
+          throw Exception(
+            'No puedes cambiar a ${nuevaPlataforma.nombre}. '
+            'Tiene $perfilesOcupados perfiles ocupados pero ${nuevaPlataforma.nombre} '
+            'solo permite ${nuevaPlataforma.maxPerfiles} perfiles máximo.',
+          );
+        }
+      }
+
+      // Actualizar cuenta
       await _client
           .from('cuentas_correo')
           .update(cuenta.toJson())
@@ -252,15 +326,66 @@ class SupabaseService {
   }
   // ==================== PERFILES ====================
 
+  // 1. AGREGAR MÉTODO HELPER para contar perfiles
+  Future<int> contarPerfilesCuenta(String cuentaId) async {
+    try {
+      final response = await _client
+          .from('perfiles')
+          .select()
+          .eq('cuenta_id', cuentaId)
+          .filter('deleted_at', 'is', null);
+
+      return (response as List).length;
+    } catch (e) {
+      throw Exception('Error al contar perfiles: $e');
+    }
+  }
+
+  // 2. AGREGAR MÉTODO para contar perfiles ocupados
+  Future<int> contarPerfilesOcupados(String cuentaId) async {
+    try {
+      final response = await _client
+          .from('perfiles')
+          .select()
+          .eq('cuenta_id', cuentaId)
+          .eq('estado', 'ocupado')
+          .filter('deleted_at', 'is', null);
+
+      return (response as List).length;
+    } catch (e) {
+      throw Exception('Error al contar perfiles ocupados: $e');
+    }
+  }
+
   Future<void> crearPerfil(Perfil perfil) async {
     try {
-      // Excluimos 'id' para que Supabase lo genere, o lo mandamos si lo generas localmente
+      // 1. Obtener cuenta para saber la plataforma
+      final cuenta = await _client
+          .from('cuentas_correo')
+          .select()
+          .eq('id', perfil.cuentaId)
+          .single();
+
+      final plataformaId = cuenta['plataforma_id'] as String;
+      final plataforma = await obtenerPlataformaPorId(plataformaId);
+
+      // 2. Contar perfiles actuales de la cuenta
+      final perfilesActuales = await contarPerfilesCuenta(perfil.cuentaId);
+
+      // 3. Validar límite
+      if (perfilesActuales >= plataforma.maxPerfiles) {
+        throw Exception(
+          'Límite alcanzado. ${plataforma.nombre} solo permite '
+          '${plataforma.maxPerfiles} perfiles por cuenta.',
+        );
+      }
+
+      // 4. Insertar perfil
       final json = perfil.toJson();
       json.remove('id');
 
       await _client.from('perfiles').insert(json);
     } catch (e) {
-      print('Error al crear perfil: $e');
       throw Exception('Error al crear perfil: $e');
     }
   }
@@ -379,7 +504,9 @@ class SupabaseService {
 
   Future<void> crearPago(Pago pago) async {
     try {
-      await _client.from('pagos').insert(pago.toJson());
+      final json = pago.toJson();
+      json.remove('id'); // Dejar que Supabase genere el ID
+      await _client.from('pagos').insert(json);
     } catch (e) {
       throw Exception('Error al crear pago: $e');
     }
@@ -420,7 +547,9 @@ class SupabaseService {
 
   Future<void> crearPagoPlataforma(PagoPlataforma pago) async {
     try {
-      await _client.from('pagos_plataforma').insert(pago.toJson());
+      final json = pago.toJson();
+      json.remove('id'); // Dejar que Supabase genere el ID
+      await _client.from('pagos_plataforma').insert(json);
     } catch (e) {
       throw Exception('Error al crear pago plataforma: $e');
     }
@@ -489,6 +618,38 @@ class SupabaseService {
       return (response as List).map((json) => Alerta.fromJson(json)).toList();
     } catch (e) {
       throw Exception('Error al obtener alertas: $e');
+    }
+  }
+
+  Future<void> crearAlerta({
+    required String tipoAlerta,
+    required String tipoEntidad,
+    required String entidadId,
+    String? clienteId,
+    String? plataformaId,
+    required String suscripcionId, // ← NUEVO: ahora es required
+    required String nivel,
+    required int diasRestantes,
+    required double monto,
+    required String mensaje,
+  }) async {
+    try {
+      await _client.from('alertas').insert({
+        'tipo_alerta': tipoAlerta,
+        'tipo_entidad': tipoEntidad,
+        'entidad_id': entidadId,
+        'cliente_id': clienteId,
+        'plataforma_id': plataformaId,
+        'suscripcion_id': suscripcionId, // ← NUEVO
+        'nivel': nivel,
+        'dias_restantes': diasRestantes,
+        'monto': monto,
+        'mensaje': mensaje,
+        'estado': 'pendiente',
+        'fecha_creacion': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw Exception('Error al crear alerta: $e');
     }
   }
 
@@ -594,7 +755,11 @@ class SupabaseService {
         notas: null,
       );
 
-      await _client.from('suscripciones').insert(suscripcion.toJson());
+      //retiramos el id para que supabase lo genere automáticamente
+      final suscripcionJson = suscripcion.toJson();
+      suscripcionJson.remove('id');
+
+      await _client.from('suscripciones').insert(suscripcionJson);
 
       // 4. Actualizar estado del perfil a "ocupado"
       await _client
@@ -606,6 +771,275 @@ class SupabaseService {
       // No necesitamos crearlas manualmente aquí
     } catch (e) {
       throw Exception('Error al crear suscripción rápida: $e');
+    }
+  }
+
+  // ==================== RECORDATORIOS DE PAGO ====================
+  // Agregar estos métodos a la clase SupabaseService
+
+  // Importar el modelo (agregar al inicio del archivo)
+  // import '../models/recordatorio_pago.dart';
+
+  /// Obtener suscripciones que necesitan recordatorio (hoy y mañana)
+  /// Incluye: activas + esperando_pago sin recordatorio hoy
+  Future<List<Suscripcion>> obtenerSuscripcionesParaRecordatorio() async {
+    try {
+      final hoy = DateTime.now();
+      final manana = hoy.add(const Duration(days: 1));
+
+      // Formatear fechas para comparación
+      final hoyStr = hoy.toIso8601String().split('T')[0];
+      final mananaStr = manana.toIso8601String().split('T')[0];
+
+      // Obtener suscripciones activas que vencen hoy o mañana
+      final response = await _client
+          .from('suscripciones')
+          .select()
+          .filter('deleted_at', 'is', null)
+          .or('estado.eq.activa,estado.eq.esperando_pago')
+          .or('fecha_proximo_pago.eq.$hoyStr,fecha_proximo_pago.eq.$mananaStr')
+          .order('fecha_proximo_pago');
+
+      final suscripciones = (response as List)
+          .map((json) => Suscripcion.fromJson(json))
+          .toList();
+
+      // Filtrar las que ya tienen recordatorio enviado hoy
+      final suscripcionesFiltradas = <Suscripcion>[];
+
+      for (final suscripcion in suscripciones) {
+        final tieneRecordatorioHoy = await _tieneRecordatorioHoy(
+          suscripcion.id,
+        );
+        if (!tieneRecordatorioHoy) {
+          suscripcionesFiltradas.add(suscripcion);
+        }
+      }
+
+      return suscripcionesFiltradas;
+    } catch (e) {
+      throw Exception('Error al obtener suscripciones para recordatorio: $e');
+    }
+  }
+
+  /// Verificar si una suscripción ya tiene recordatorio enviado hoy
+  Future<bool> _tieneRecordatorioHoy(String suscripcionId) async {
+    try {
+      final hoy = DateTime.now().toIso8601String().split('T')[0];
+
+      final response = await _client
+          .from('recordatorios_pago')
+          .select()
+          .eq('suscripcion_id', suscripcionId)
+          .eq('fecha_recordatorio', hoy)
+          .eq('enviado', true)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Marcar recordatorio como enviado y cambiar estado a esperando_pago
+  Future<void> marcarRecordatorioEnviado(String suscripcionId) async {
+    try {
+      final hoy = DateTime.now();
+      final hoyStr = hoy.toIso8601String().split('T')[0];
+
+      // 1. Crear o actualizar recordatorio
+      final recordatorioExistente = await _client
+          .from('recordatorios_pago')
+          .select()
+          .eq('suscripcion_id', suscripcionId)
+          .eq('fecha_recordatorio', hoyStr)
+          .maybeSingle();
+
+      if (recordatorioExistente != null) {
+        // Actualizar existente
+        await _client
+            .from('recordatorios_pago')
+            .update({'enviado': true, 'fecha_envio': hoy.toIso8601String()})
+            .eq('id', recordatorioExistente['id']);
+      } else {
+        // Crear nuevo
+        await _client.from('recordatorios_pago').insert({
+          'suscripcion_id': suscripcionId,
+          'fecha_recordatorio': hoyStr,
+          'enviado': true,
+          'fecha_envio': hoy.toIso8601String(),
+        });
+      }
+
+      // 2. Cambiar estado de suscripción a esperando_pago
+      await _client
+          .from('suscripciones')
+          .update({'estado': 'esperando_pago'})
+          .eq('id', suscripcionId);
+    } catch (e) {
+      throw Exception('Error al marcar recordatorio: $e');
+    }
+  }
+
+  /// Obtener suscripciones en lista de espera
+  Future<List<Suscripcion>> obtenerSuscripcionesEnEspera() async {
+    try {
+      final response = await _client
+          .from('suscripciones')
+          .select()
+          .filter('deleted_at', 'is', null)
+          .eq('estado', 'esperando_pago')
+          .order('fecha_proximo_pago');
+
+      return (response as List)
+          .map((json) => Suscripcion.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener suscripciones en espera: $e');
+    }
+  }
+
+  /// Renovar suscripción con pago
+  Future<void> renovarSuscripcion({
+    required String suscripcionId,
+    required String clienteId,
+    required DateTime nuevaFechaPago,
+    required double monto,
+    required String metodoPago,
+    String? referencia,
+    String? notas,
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
+
+      // 1. Obtener suscripción actual para calcular fecha límite
+      final suscripcionActual = await _client
+          .from('suscripciones')
+          .select()
+          .eq('id', suscripcionId)
+          .single();
+
+      final suscripcion = Suscripcion.fromJson(suscripcionActual);
+
+      // Calcular fecha límite (5 días después del próximo pago)
+      final nuevaFechaLimite = nuevaFechaPago.add(const Duration(days: 5));
+
+      // 2. Registrar pago
+      await _client.from('pagos').insert({
+        'suscripcion_id': suscripcionId,
+        'cliente_id': clienteId,
+        'monto': monto,
+        'fecha_pago': ahora.toIso8601String(),
+        'metodo_pago': metodoPago,
+        'referencia': referencia,
+        'notas': notas,
+        'registrado_por': usuarioId,
+      });
+
+      // 3. Actualizar suscripción
+      await _client
+          .from('suscripciones')
+          .update({
+            'fecha_proximo_pago': nuevaFechaPago.toIso8601String().split(
+              'T',
+            )[0],
+            'fecha_limite_pago': nuevaFechaLimite.toIso8601String().split(
+              'T',
+            )[0],
+            'estado': 'activa',
+          })
+          .eq('id', suscripcionId);
+
+      // 4. Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'renovada',
+        'precio_anterior': suscripcion.precio,
+        'precio_nuevo': monto,
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas': 'Renovación con pago registrado',
+      });
+
+      // 5. Eliminar alertas vencidas de esta suscripción
+      await _client
+          .from('alertas')
+          .delete()
+          .eq('suscripcion_id', suscripcionId)
+          .lt('dias_restantes', 0);
+    } catch (e) {
+      throw Exception('Error al renovar suscripción: $e');
+    }
+  }
+
+  /// Cancelar suscripción (soft delete) y liberar perfil
+  Future<void> cancelarSuscripcion(
+    String suscripcionId, {
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
+
+      // 1. Obtener suscripción para acceder al perfil
+      final suscripcionData = await _client
+          .from('suscripciones')
+          .select()
+          .eq('id', suscripcionId)
+          .single();
+
+      final perfilId = suscripcionData['perfil_id'] as String;
+
+      // 2. Soft delete de suscripción
+      await _client
+          .from('suscripciones')
+          .update({
+            'deleted_at': ahora.toIso8601String(),
+            'estado': 'cancelada',
+          })
+          .eq('id', suscripcionId);
+
+      // 3. Liberar perfil
+      await _client
+          .from('perfiles')
+          .update({'estado': 'disponible'})
+          .eq('id', perfilId);
+
+      // 4. Eliminar alertas asociadas
+      await _client
+          .from('alertas')
+          .delete()
+          .eq('suscripcion_id', suscripcionId);
+
+      // 5. Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'cancelada',
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas': 'Suscripción cancelada por falta de pago',
+      });
+    } catch (e) {
+      throw Exception('Error al cancelar suscripción: $e');
+    }
+  }
+
+  /// Obtener recordatorios de una suscripción (historial)
+  Future<List<RecordatorioPago>> obtenerRecordatoriosSuscripcion(
+    String suscripcionId,
+  ) async {
+    try {
+      final response = await _client
+          .from('recordatorios_pago')
+          .select()
+          .eq('suscripcion_id', suscripcionId)
+          .order('fecha_recordatorio', ascending: false);
+
+      return (response as List)
+          .map((json) => RecordatorioPago.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener recordatorios: $e');
     }
   }
 }

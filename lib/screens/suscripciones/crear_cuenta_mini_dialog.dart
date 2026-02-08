@@ -6,10 +6,7 @@ import '../../services/supabase_service.dart';
 class CrearCuentaMiniDialog extends StatefulWidget {
   final Plataforma plataforma;
 
-  const CrearCuentaMiniDialog({
-    super.key,
-    required this.plataforma,
-  });
+  const CrearCuentaMiniDialog({super.key, required this.plataforma});
 
   @override
   State<CrearCuentaMiniDialog> createState() => _CrearCuentaMiniDialogState();
@@ -18,10 +15,10 @@ class CrearCuentaMiniDialog extends StatefulWidget {
 class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
   final _formKey = GlobalKey<FormState>();
   final _supabaseService = SupabaseService();
-  
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -48,21 +45,30 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
         notas: null,
       );
 
-      await _supabaseService.crearCuenta(cuenta);
+      // crearCuenta() ahora retorna el ID y crea los perfiles automáticamente
+      final cuentaId = await _supabaseService.crearCuenta(cuenta);
 
       if (mounted) {
-        // Recargar y devolver cuenta creada
+        // Recargar cuentas y perfiles
         final cuentas = await _supabaseService.obtenerCuentas();
-        final cuentaCreada = cuentas.firstWhere(
-          (c) => c.email == cuenta.email && c.plataformaId == widget.plataforma.id,
+        final cuentaCreada = cuentas.firstWhere((c) => c.id == cuentaId);
+
+        // Mostrar éxito con info de perfiles creados
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Cuenta creada con ${widget.plataforma.maxPerfiles} perfiles disponibles',
+            ),
+            backgroundColor: Colors.green,
+          ),
         );
-        
+
         Navigator.pop(context, cuentaCreada);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -86,7 +92,10 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.email, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.email,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -94,11 +103,17 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
                       children: [
                         const Text(
                           'Nueva Cuenta',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           widget.plataforma.nombre,
-                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
@@ -106,7 +121,7 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // Email
               TextFormField(
                 controller: _emailController,
@@ -124,7 +139,7 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
                 enabled: !_isLoading,
               ),
               const SizedBox(height: 16),
-              
+
               // Contraseña
               TextFormField(
                 controller: _passwordController,
@@ -133,16 +148,22 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
                   border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
                 obscureText: _obscurePassword,
-                validator: (v) => v?.trim().isEmpty == true ? 'Campo requerido' : null,
+                validator: (v) =>
+                    v?.trim().isEmpty == true ? 'Campo requerido' : null,
                 enabled: !_isLoading,
               ),
               const SizedBox(height: 20),
-              
+
               // Botones
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -158,7 +179,10 @@ class _CrearCuentaMiniDialogState extends State<CrearCuentaMiniDialog> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.check),
                     label: const Text('Crear'),

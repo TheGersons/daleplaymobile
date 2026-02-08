@@ -126,6 +126,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_usuarios",
         onPressed: () => _mostrarDialogo(),
         icon: const Icon(Icons.person_add),
         label: const Text('Nuevo Usuario'),

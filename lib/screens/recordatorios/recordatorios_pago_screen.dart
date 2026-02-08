@@ -1,0 +1,891 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../models/suscripcion.dart';
+import '../../models/cliente.dart';
+import '../../models/plataforma.dart';
+import '../../models/perfil.dart';
+import '../../models/cuenta_correo.dart';
+import '../../services/supabase_service.dart';
+import 'renovar_suscripcion_dialog.dart';
+
+class RecordatoriosPagoScreen extends StatefulWidget {
+  const RecordatoriosPagoScreen({super.key});
+
+  @override
+  State<RecordatoriosPagoScreen> createState() => _RecordatoriosPagoScreenState();
+}
+
+class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
+    with SingleTickerProviderStateMixin {
+  final _supabaseService = SupabaseService();
+
+  late TabController _tabController;
+
+  List<Suscripcion> _suscripcionesRecordatorio = [];
+  List<Suscripcion> _suscripcionesEspera = [];
+  List<Cliente> _clientes = [];
+  List<Plataforma> _plataformas = [];
+  List<Perfil> _perfiles = [];
+  List<CuentaCorreo> _cuentas = [];
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+    _cargarDatos();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargarDatos() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final recordatorio = await _supabaseService.obtenerSuscripcionesParaRecordatorio();
+      final espera = await _supabaseService.obtenerSuscripcionesEnEspera();
+      final clientes = await _supabaseService.obtenerClientes();
+      final plataformas = await _supabaseService.obtenerPlataformas();
+      final perfiles = await _supabaseService.obtenerPerfiles();
+      final cuentas = await _supabaseService.obtenerCuentas();
+
+      setState(() {
+        _suscripcionesRecordatorio = recordatorio;
+        _suscripcionesEspera = espera;
+        _clientes = clientes;
+        _plataformas = plataformas;
+        _perfiles = perfiles;
+        _cuentas = cuentas;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar datos: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Gestión de Pagos'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(
+              icon: const Icon(Icons.notifications_active),
+              text: 'Recordatorios (${_suscripcionesRecordatorio.length})',
+            ),
+            Tab(
+              icon: const Icon(Icons.hourglass_empty),
+              text: 'En Espera (${_suscripcionesEspera.length})',
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _cargarDatos,
+            tooltip: 'Actualizar',
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRecordatoriosTab(),
+                _buildEsperaTab(),
+              ],
+            ),
+    );
+  }
+
+  // ==================== TAB 1: RECORDATORIOS ====================
+
+  Widget _buildRecordatoriosTab() {
+    if (_suscripcionesRecordatorio.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 80,
+              color: Colors.green[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No hay recordatorios pendientes',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Todos los recordatorios han sido enviados',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Agrupar por cliente
+    final Map<String, List<Suscripcion>> suscripcionesPorCliente = {};
+    for (final suscripcion in _suscripcionesRecordatorio) {
+      if (!suscripcionesPorCliente.containsKey(suscripcion.clienteId)) {
+        suscripcionesPorCliente[suscripcion.clienteId] = [];
+      }
+      suscripcionesPorCliente[suscripcion.clienteId]!.add(suscripcion);
+    }
+
+    return RefreshIndicator(
+      onRefresh: _cargarDatos,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: suscripcionesPorCliente.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemBuilder: (context, index) {
+          final clienteId = suscripcionesPorCliente.keys.elementAt(index);
+          final suscripciones = suscripcionesPorCliente[clienteId]!;
+          final cliente = _clientes.firstWhere((c) => c.id == clienteId);
+
+          return _buildClienteRecordatorioCard(cliente, suscripciones);
+        },
+      ),
+    );
+  }
+
+  Widget _buildClienteRecordatorioCard(
+    Cliente cliente,
+    List<Suscripcion> suscripciones,
+  ) {
+    return Card(
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: Text(
+            cliente.nombreCompleto[0].toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(
+          cliente.nombreCompleto,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        subtitle: Row(
+          children: [
+            const Icon(Icons.phone, size: 14, color: Colors.white70),
+            const SizedBox(width: 6),
+            Container(
+              width: 40,
+              child: Text(
+                cliente.telefono,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 14, color: Colors.blue),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: cliente.telefono));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Teléfono copiado'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        trailing: SizedBox(
+          width: 140,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Chip(
+                label: Text('${suscripciones.length}'),
+                avatar: const Icon(Icons.subscriptions, size: 16),
+                backgroundColor: Colors.orange.withOpacity(0.2),
+                side: const BorderSide(color: Colors.orange),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _marcarTodasRecordatorio(cliente, suscripciones),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text(''),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        children: suscripciones
+            .map((s) => _buildSuscripcionRecordatorioTile(s, cliente))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildSuscripcionRecordatorioTile(
+    Suscripcion suscripcion,
+    Cliente cliente,
+  ) {
+    final plataforma = _plataformas.firstWhere(
+      (p) => p.id == suscripcion.plataformaId,
+    );
+    final colorPlataforma = Color(
+      int.parse(plataforma.color.replaceFirst('#', '0xFF')),
+    );
+
+    final hoy = DateTime.now();
+    final dias = suscripcion.fechaProximoPago.difference(hoy).inDays;
+    final esHoy = dias == 0;
+    final esManana = dias == 1;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          _buildLogo(plataforma),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        plataforma.nombre,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: esHoy
+                            ? Colors.red.withOpacity(0.2)
+                            : Colors.orange.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: esHoy ? Colors.red : Colors.orange),
+                      ),
+                      child: Text(
+                        esHoy ? 'HOY' : 'MAÑANA',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: esHoy ? Colors.red : Colors.orange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.event, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(suscripcion.fechaProximoPago),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(Icons.attach_money, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'L ${suscripcion.precio.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () => _marcarRecordatorio(suscripcion, cliente),
+            icon: const Icon(Icons.check, size: 16),
+            label: const Text('Enviado', style: TextStyle(fontSize: 12)),
+            style: FilledButton.styleFrom(
+              backgroundColor: colorPlataforma,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _marcarRecordatorio(
+    Suscripcion suscripcion,
+    Cliente cliente,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Recordatorio'),
+        content: Text(
+          '¿Confirmas que enviaste el recordatorio de pago a ${cliente.nombreCompleto}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      try {
+        await _supabaseService.marcarRecordatorioEnviado(suscripcion.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recordatorio marcado'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _cargarDatos();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _marcarTodasRecordatorio(
+    Cliente cliente,
+    List<Suscripcion> suscripciones,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Recordatorios'),
+        content: Text(
+          '¿Confirmas que enviaste los recordatorios de pago a ${cliente.nombreCompleto}?\n\n'
+          'Se marcarán ${suscripciones.length} suscripción(es).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar Todo'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      try {
+        for (final suscripcion in suscripciones) {
+          await _supabaseService.marcarRecordatorioEnviado(suscripcion.id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${suscripciones.length} recordatorio(s) marcado(s)',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _cargarDatos();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // ==================== TAB 2: LISTA DE ESPERA ====================
+
+  Widget _buildEsperaTab() {
+    if (_suscripcionesEspera.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 80,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No hay suscripciones en espera',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Las suscripciones aparecerán aquí después de enviar recordatorios',
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _cargarDatos,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _suscripcionesEspera.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final suscripcion = _suscripcionesEspera[index];
+          return _buildSuscripcionEsperaCard(suscripcion);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSuscripcionEsperaCard(Suscripcion suscripcion) {
+    final cliente = _clientes.firstWhere((c) => c.id == suscripcion.clienteId);
+    final plataforma = _plataformas.firstWhere(
+      (p) => p.id == suscripcion.plataformaId,
+    );
+    final perfil = _perfiles.firstWhere((p) => p.id == suscripcion.perfilId);
+    final cuenta = _cuentas.firstWhere((c) => c.id == perfil.cuentaId);
+
+    final colorPlataforma = Color(
+      int.parse(plataforma.color.replaceFirst('#', '0xFF')),
+    );
+
+    final hoy = DateTime.now();
+    final diasEspera = hoy.difference(suscripcion.fechaProximoPago).inDays;
+    final diasTexto = diasEspera == 0
+        ? 'Vence hoy'
+        : diasEspera == 1
+            ? 'Vencida hace 1 día'
+            : 'Vencida hace $diasEspera días';
+
+    final colorDias = diasEspera == 0
+        ? Colors.orange
+        : diasEspera <= 3
+            ? Colors.red
+            : Colors.red[900]!;
+
+    return Card(
+      child: Column(
+        children: [
+          // Header con plataforma
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  colorPlataforma.withOpacity(0.8),
+                  colorPlataforma.withOpacity(0.6),
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildLogo(plataforma),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        plataforma.nombre,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        cliente.nombreCompleto,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorDias.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: colorDias),
+                  ),
+                  child: Text(
+                    diasTexto,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: colorDias,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Contenido
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Info del cliente
+                Row(
+                  children: [
+                    const Icon(Icons.phone, size: 16, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        cliente.telefono,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 16, color: Colors.blue),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: cliente.telefono),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Teléfono copiado'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 12),
+
+                // Detalles de suscripción
+                _buildInfoRow(
+                  'Cuenta',
+                  cuenta.email,
+                  Icons.email,
+                  copiable: true,
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow('Perfil', perfil.nombrePerfil, Icons.person),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  'Precio',
+                  'L ${suscripcion.precio.toStringAsFixed(2)}',
+                  Icons.attach_money,
+                  valueColor: Colors.green,
+                ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  'Vencimiento',
+                  DateFormat('dd/MM/yyyy').format(suscripcion.fechaProximoPago),
+                  Icons.event,
+                  valueColor: colorDias,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Botones de acción
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _cancelarSuscripcion(suscripcion, cliente),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Cancelar'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: () => _renovarSuscripcion(
+                          suscripcion,
+                          cliente,
+                          plataforma,
+                        ),
+                        icon: const Icon(Icons.autorenew, size: 18),
+                        label: const Text('Renovar'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: colorPlataforma,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    String label,
+    String value,
+    IconData icon, {
+    Color? valueColor,
+    bool copiable = false,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[400]),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? Colors.white,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (copiable)
+          IconButton(
+            icon: const Icon(Icons.copy, size: 14, color: Colors.blue),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: value));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$label copiado'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _renovarSuscripcion(
+    Suscripcion suscripcion,
+    Cliente cliente,
+    Plataforma plataforma,
+  ) async {
+    await showDialog(
+      context: context,
+      builder: (context) => RenovarSuscripcionDialog(
+        suscripcion: suscripcion,
+        cliente: cliente,
+        plataforma: plataforma,
+        onRenovada: _cargarDatos,
+      ),
+    );
+  }
+
+  Future<void> _cancelarSuscripcion(
+    Suscripcion suscripcion,
+    Cliente cliente,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancelar Suscripción'),
+        content: Text(
+          '¿Estás seguro de cancelar la suscripción de ${cliente.nombreCompleto}?\n\n'
+          'Esta acción:\n'
+          '• Liberará el perfil\n'
+          '• Eliminará las alertas\n'
+          '• Marcará la suscripción como cancelada\n\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, mantener'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sí, cancelar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      try {
+        await _supabaseService.cancelarSuscripcion(suscripcion.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Suscripción cancelada'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _cargarDatos();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // ==================== HELPERS ====================
+
+  Widget _buildLogo(Plataforma plataforma) {
+    final logos = {
+      'Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Mega Premium - Netflix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Netflix_2015_logo.svg/330px-Netflix_2015_logo.svg.png',
+      'Disney+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/330px-Disney%2B_logo.svg.png',
+      'HBO':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/330px-HBO_logo.svg.png',
+      'HBO Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Max':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
+      'Prime Video':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
+      'Spotify':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
+      'YouTube Premium':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
+      'Paramount+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
+      'Apple TV+':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
+      'Vix':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
+      'Viki':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
+      'Crunchyroll':
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
+    };
+
+    final logoUrl = logos[plataforma.nombre];
+
+    if (logoUrl != null) {
+      return Container(
+        width: 48,
+        height: 48,
+        padding: const EdgeInsets.all(6),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
+        child: CachedNetworkImage(
+          imageUrl: logoUrl,
+          fit: BoxFit.contain,
+          errorWidget: (_, __, ___) =>
+              const FaIcon(FontAwesomeIcons.tv, size: 20, color: Colors.grey),
+        ),
+      );
+    }
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      child: const FaIcon(FontAwesomeIcons.tv, size: 20, color: Colors.grey),
+    );
+  }
+}

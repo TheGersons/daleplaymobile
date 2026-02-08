@@ -42,7 +42,7 @@ class _CrearPerfilMiniDialogState extends State<CrearPerfilMiniDialog> {
         id: '00000000-0000-0000-0000-000000000000',
         cuentaId: widget.cuenta.id,
         nombrePerfil: _nombreController.text.trim(),
-        pin: _pinController.text.trim().isEmpty ? '' : _pinController.text.trim(),
+        pin: _pinController.text.trim().isEmpty ? null : _pinController.text.trim(),
         estado: 'disponible',
         fechaCreacion: DateTime.now(),
       );
@@ -137,11 +137,16 @@ class _CrearPerfilMiniDialogState extends State<CrearPerfilMiniDialog> {
                   LengthLimitingTextInputFormatter(4),
                 ],
                 validator: (v) {
-                  if (v?.isNotEmpty == true && v!.length != 4) {
-                    return 'El PIN debe tener 4 dígitos';
-                  }
-                  return null;
-                },
+  // Si está vacío, es válido (porque es opcional)
+  if (v == null || v.isEmpty) {
+    return null; 
+  }
+  // Si tiene algo, entonces sí debe tener 4 dígitos
+  if (v.length != 4) {
+    return 'El PIN debe tener 4 dígitos';
+  }
+  return null;
+},
                 enabled: !_isLoading,
               ),
               const SizedBox(height: 20),

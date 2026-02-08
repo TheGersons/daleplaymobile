@@ -14,33 +14,34 @@ class SuscripcionRapidaDialog extends StatefulWidget {
   const SuscripcionRapidaDialog({super.key});
 
   @override
-  State<SuscripcionRapidaDialog> createState() => _SuscripcionRapidaDialogState();
+  State<SuscripcionRapidaDialog> createState() =>
+      _SuscripcionRapidaDialogState();
 }
 
 class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
   final _formKey = GlobalKey<FormState>();
   final _supabaseService = SupabaseService();
-  
+
   // Datos cargados
   List<Cliente> _clientes = [];
   List<Plataforma> _plataformas = [];
   List<CuentaCorreo> _cuentas = [];
   List<Perfil> _perfiles = [];
-  
+
   // Listas filtradas
   List<CuentaCorreo> _cuentasFiltradas = [];
   List<Perfil> _perfilesFiltrados = [];
-  
+
   // Selecciones
   Cliente? _clienteSeleccionado;
   Plataforma? _plataformaSeleccionada;
   CuentaCorreo? _cuentaSeleccionada;
   Perfil? _perfilSeleccionado;
-  
+
   DateTime _fechaInicio = DateTime.now();
   DateTime? _fechaVencimiento;
   double _precio = 0.0;
-  
+
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -52,13 +53,13 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
 
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final clientes = await _supabaseService.obtenerClientes();
       final plataformas = await _supabaseService.obtenerPlataformas();
       final cuentas = await _supabaseService.obtenerCuentas();
       final perfiles = await _supabaseService.obtenerPerfiles();
-      
+
       setState(() {
         _clientes = clientes.where((c) => c.estado == 'activo').toList();
         _plataformas = plataformas.where((p) => p.estado == 'activa').toList();
@@ -67,9 +68,9 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar datos: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al cargar datos: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -95,11 +96,11 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       _cuentaSeleccionada = null;
       _perfilSeleccionado = null;
       _perfilesFiltrados = [];
-      
+
       if (plataforma != null) {
         _precio = plataforma.precioBase;
         _calcularFechaVencimiento();
-        
+
         _cuentasFiltradas = _cuentas
             .where((c) => c.plataformaId == plataforma.id)
             .toList();
@@ -115,7 +116,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
     setState(() {
       _cuentaSeleccionada = cuenta;
       _perfilSeleccionado = null;
-      
+
       if (cuenta != null) {
         _perfilesFiltrados = _perfiles
             .where((p) => p.cuentaId == cuenta.id && p.estado == 'disponible')
@@ -136,7 +137,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       _fechaInicio.month + 1,
       _fechaInicio.day,
     );
-    
+
     setState(() => _fechaVencimiento = siguienteMes);
   }
 
@@ -145,13 +146,13 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       context: context,
       builder: (context) => const CrearClienteMiniDialog(),
     );
-    
+
     if (cliente != null) {
       setState(() {
         _clientes.add(cliente);
         _clienteSeleccionado = cliente;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Cliente "${cliente.nombreCompleto}" creado')),
@@ -167,21 +168,22 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       );
       return;
     }
-    
+
     final cuenta = await showDialog<CuentaCorreo>(
       context: context,
-      builder: (context) => CrearCuentaMiniDialog(plataforma: _plataformaSeleccionada!),
+      builder: (context) =>
+          CrearCuentaMiniDialog(plataforma: _plataformaSeleccionada!),
     );
-    
+
     if (cuenta != null) {
       setState(() {
         _cuentas.add(cuenta);
         _cuentasFiltradas.add(cuenta);
         _cuentaSeleccionada = cuenta;
       });
-      
+
       _onCuentaChanged(cuenta);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Cuenta "${cuenta.email}" creada')),
@@ -197,19 +199,19 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       );
       return;
     }
-    
+
     final perfil = await showDialog<Perfil>(
       context: context,
       builder: (context) => CrearPerfilMiniDialog(cuenta: _cuentaSeleccionada!),
     );
-    
+
     if (perfil != null) {
       setState(() {
         _perfiles.add(perfil);
         _perfilesFiltrados.add(perfil);
         _perfilSeleccionado = perfil;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Perfil "${perfil.nombrePerfil}" creado')),
@@ -220,7 +222,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
 
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_clienteSeleccionado == null) {
       _mostrarError('Selecciona un cliente');
       return;
@@ -305,7 +307,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                 ],
               ),
             ),
-            
+
             // Body
             Expanded(
               child: _isLoading
@@ -324,19 +326,23 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                   child: DropdownSearch<Cliente>(
                                     selectedItem: _clienteSeleccionado,
                                     items: _clientes,
-                                    itemAsString: (Cliente c) => c.nombreCompleto,
-                                    dropdownDecoratorProps: const DropDownDecoratorProps(
-                                      dropdownSearchDecoration: InputDecoration(
-                                        labelText: 'Cliente *',
-                                        border: OutlineInputBorder(),
-                                        prefixIcon: Icon(Icons.person),
-                                      ),
-                                    ),
+                                    itemAsString: (Cliente c) =>
+                                        c.nombreCompleto,
+                                    dropdownDecoratorProps:
+                                        const DropDownDecoratorProps(
+                                          dropdownSearchDecoration:
+                                              InputDecoration(
+                                                labelText: 'Cliente *',
+                                                border: OutlineInputBorder(),
+                                                prefixIcon: Icon(Icons.person),
+                                              ),
+                                        ),
                                     popupProps: PopupProps.menu(
                                       showSearchBox: true,
                                       searchFieldProps: const TextFieldProps(
                                         decoration: InputDecoration(
-                                          hintText: 'Buscar por nombre o teléfono...',
+                                          hintText:
+                                              'Buscar por nombre o teléfono...',
                                           prefixIcon: Icon(Icons.search),
                                         ),
                                       ),
@@ -347,17 +353,30 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                           selected: isSelected,
                                         );
                                       },
-                                      searchDelay: const Duration(milliseconds: 300),
+                                      searchDelay: const Duration(
+                                        milliseconds: 300,
+                                      ),
                                       fit: FlexFit.loose,
-                                      constraints: const BoxConstraints(maxHeight: 400),
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 400,
+                                      ),
                                     ),
-                                    compareFn: (item1, item2) => item1.id == item2.id,
+                                    compareFn: (item1, item2) =>
+                                        item1.id == item2.id,
                                     filterFn: (item, filter) {
-                                      final query = filter.toLowerCase().replaceAll('-', '');
-                                      return item.nombreCompleto.toLowerCase().contains(query) ||
-                                             item.telefono.replaceAll('-', '').contains(query);
+                                      final query = filter
+                                          .toLowerCase()
+                                          .replaceAll('-', '');
+                                      return item.nombreCompleto
+                                              .toLowerCase()
+                                              .contains(query) ||
+                                          item.telefono
+                                              .replaceAll('-', '')
+                                              .contains(query);
                                     },
-                                    onChanged: _isSaving ? null : _onClienteChanged,
+                                    onChanged: _isSaving
+                                        ? null
+                                        : _onClienteChanged,
                                     enabled: !_isSaving,
                                   ),
                                 ),
@@ -370,7 +389,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                               ],
                             ),
                             const SizedBox(height: 16),
-                            
+
                             // Plataforma
                             DropdownButtonFormField<Plataforma>(
                               value: _plataformaSeleccionada,
@@ -380,33 +399,47 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.tv),
                               ),
-                              items: _plataformas.map((p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: BoxDecoration(
-                                            color: Color(int.parse(p.color.replaceFirst('#', '0xFF'))),
-                                            shape: BoxShape.circle,
+                              items: _plataformas
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p,
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: Color(
+                                                int.parse(
+                                                  p.color.replaceFirst(
+                                                    '#',
+                                                    '0xFF',
+                                                  ),
+                                                ),
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            p.nombre,
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              p.nombre,
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
-                                  )).toList(),
-                              onChanged: _isSaving || _clienteSeleccionado == null ? null : _onPlataformaChanged,
+                                  )
+                                  .toList(),
+                              onChanged:
+                                  _isSaving || _clienteSeleccionado == null
+                                  ? null
+                                  : _onPlataformaChanged,
                             ),
                             const SizedBox(height: 16),
-                            
+
                             // Cuenta
                             Row(
                               children: [
@@ -415,16 +448,24 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                     selectedItem: _cuentaSeleccionada,
                                     items: _cuentasFiltradas,
                                     itemAsString: (CuentaCorreo c) => c.email,
-                                    dropdownDecoratorProps: DropDownDecoratorProps(
-                                      dropdownSearchDecoration: InputDecoration(
-                                        labelText: 'Cuenta *',
-                                        border: const OutlineInputBorder(),
-                                        prefixIcon: const Icon(Icons.email),
-                                        helperText: _cuentasFiltradas.isEmpty && _plataformaSeleccionada != null
-                                            ? 'No hay cuentas, crea una'
-                                            : null,
-                                      ),
-                                    ),
+                                    dropdownDecoratorProps:
+                                        DropDownDecoratorProps(
+                                          dropdownSearchDecoration:
+                                              InputDecoration(
+                                                labelText: 'Cuenta *',
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                prefixIcon: const Icon(
+                                                  Icons.email,
+                                                ),
+                                                helperText:
+                                                    _cuentasFiltradas.isEmpty &&
+                                                        _plataformaSeleccionada !=
+                                                            null
+                                                    ? 'No hay cuentas, crea una'
+                                                    : null,
+                                              ),
+                                        ),
                                     popupProps: PopupProps.menu(
                                       showSearchBox: true,
                                       searchFieldProps: const TextFieldProps(
@@ -433,31 +474,49 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                           prefixIcon: Icon(Icons.search),
                                         ),
                                       ),
-                                      emptyBuilder: (context, searchEntry) => const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(20),
-                                          child: Text('No hay cuentas disponibles'),
-                                        ),
+                                      emptyBuilder: (context, searchEntry) =>
+                                          const Center(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(20),
+                                              child: Text(
+                                                'No hay cuentas disponibles',
+                                              ),
+                                            ),
+                                          ),
+                                      searchDelay: const Duration(
+                                        milliseconds: 300,
                                       ),
-                                      searchDelay: const Duration(milliseconds: 300),
                                       fit: FlexFit.loose,
-                                      constraints: const BoxConstraints(maxHeight: 400),
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 400,
+                                      ),
                                     ),
-                                    compareFn: (item1, item2) => item1.id == item2.id,
-                                    onChanged: _isSaving || _plataformaSeleccionada == null ? null : _onCuentaChanged,
-                                    enabled: !_isSaving && _plataformaSeleccionada != null,
+                                    compareFn: (item1, item2) =>
+                                        item1.id == item2.id,
+                                    onChanged:
+                                        _isSaving ||
+                                            _plataformaSeleccionada == null
+                                        ? null
+                                        : _onCuentaChanged,
+                                    enabled:
+                                        !_isSaving &&
+                                        _plataformaSeleccionada != null,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton.filledTonal(
-                                  onPressed: _isSaving || _plataformaSeleccionada == null ? null : _crearCuenta,
+                                  onPressed:
+                                      _isSaving ||
+                                          _plataformaSeleccionada == null
+                                      ? null
+                                      : _crearCuenta,
                                   icon: const Icon(Icons.add),
                                   tooltip: 'Nueva Cuenta',
                                 ),
                               ],
                             ),
                             const SizedBox(height: 16),
-                            
+
                             // Perfil
                             Row(
                               children: [
@@ -470,8 +529,12 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                       dropdownSearchDecoration: InputDecoration(
                                         labelText: 'Perfil *',
                                         border: const OutlineInputBorder(),
-                                        prefixIcon: const Icon(Icons.person_outline),
-                                        helperText: _perfilesFiltrados.isEmpty && _cuentaSeleccionada != null
+                                        prefixIcon: const Icon(
+                                          Icons.person_outline,
+                                        ),
+                                        helperText:
+                                            _perfilesFiltrados.isEmpty &&
+                                                _cuentaSeleccionada != null
                                             ? 'No hay perfiles disponibles, crea uno'
                                             : null,
                                       ),
@@ -488,41 +551,62 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                         return ListTile(
                                           title: Text(item.nombrePerfil),
                                           subtitle: Text('Disponible'),
-                                          trailing: Icon(Icons.check_circle, color: Colors.green.shade300),
+                                          trailing: Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green.shade300,
+                                          ),
                                           selected: isSelected,
                                         );
                                       },
-                                      emptyBuilder: (context, searchEntry) => const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(20),
-                                          child: Text('No hay perfiles disponibles'),
-                                        ),
+                                      emptyBuilder: (context, searchEntry) =>
+                                          const Center(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(20),
+                                              child: Text(
+                                                'No hay perfiles disponibles',
+                                              ),
+                                            ),
+                                          ),
+                                      searchDelay: const Duration(
+                                        milliseconds: 300,
                                       ),
-                                      searchDelay: const Duration(milliseconds: 300),
                                       fit: FlexFit.loose,
-                                      constraints: const BoxConstraints(maxHeight: 400),
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 400,
+                                      ),
                                     ),
-                                    compareFn: (item1, item2) => item1.id == item2.id,
-                                    onChanged: _isSaving || _cuentaSeleccionada == null ? null : _onPerfilChanged,
-                                    enabled: !_isSaving && _cuentaSeleccionada != null,
+                                    compareFn: (item1, item2) =>
+                                        item1.id == item2.id,
+                                    onChanged:
+                                        _isSaving || _cuentaSeleccionada == null
+                                        ? null
+                                        : _onPerfilChanged,
+                                    enabled:
+                                        !_isSaving &&
+                                        _cuentaSeleccionada != null,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton.filledTonal(
-                                  onPressed: _isSaving || _cuentaSeleccionada == null ? null : _crearPerfil,
+                                  onPressed:
+                                      _isSaving || _cuentaSeleccionada == null
+                                      ? null
+                                      : _crearPerfil,
                                   icon: const Icon(Icons.add),
                                   tooltip: 'Nuevo Perfil',
                                 ),
                               ],
                             ),
                             const SizedBox(height: 24),
-                            
+
                             // Fecha Inicio
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.calendar_today),
                               title: const Text('Fecha de Inicio'),
-                              subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInicio)),
+                              subtitle: Text(
+                                DateFormat('dd/MM/yyyy').format(_fechaInicio),
+                              ),
                               trailing: IconButton(
                                 icon: const Icon(Icons.edit_calendar),
                                 onPressed: _isSaving
@@ -543,38 +627,85 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                       },
                               ),
                             ),
-                            
+
                             // Fecha Vencimiento
                             if (_fechaVencimiento != null) ...[
                               const Divider(),
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.event_available),
-                                title: const Text('Fecha de Vencimiento'),
-                                subtitle: Text(
-                                  DateFormat('dd/MM/yyyy').format(_fechaVencimiento!),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(20),
+                              InkWell(
+                                onTap: _isSaving
+                                    ? null
+                                    : () async {
+                                        final fecha = await showDatePicker(
+                                          context: context,
+                                          initialDate: _fechaVencimiento!,
+                                          firstDate: _fechaInicio,
+                                          lastDate: DateTime(2030),
+                                        );
+                                        if (fecha != null) {
+                                          setState(
+                                            () => _fechaVencimiento = fecha,
+                                          );
+                                        }
+                                      },
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(
+                                    Icons.event_available,
+                                    color: Colors.blue,
                                   ),
-                                  child: Text(
-                                    'Auto-calculado',
-                                    style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                                  title: const Text('Fecha de Próximo Pago'),
+                                  subtitle: Text(
+                                    DateFormat(
+                                      'dd/MM/yyyy',
+                                    ).format(_fechaVencimiento!),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Editable',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.edit,
+                                        size: 18,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ],
-                            
+
                             // Precio
                             if (_precio > 0) ...[
                               const Divider(),
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.attach_money, color: Colors.green),
+                                leading: const Icon(
+                                  Icons.attach_money,
+                                  color: Colors.green,
+                                ),
                                 title: const Text('Precio Mensual'),
                                 subtitle: Text(
                                   'L ${_precio.toStringAsFixed(2)}',
@@ -585,14 +716,20 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                   ),
                                 ),
                                 trailing: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.green.shade50,
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
                                     'De plataforma',
-                                    style: TextStyle(fontSize: 11, color: Colors.green.shade700),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.green.shade700,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -602,7 +739,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                       ),
                     ),
             ),
-            
+
             // Botones
             Padding(
               padding: const EdgeInsets.all(20),
@@ -623,7 +760,10 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green.shade700),
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade700,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -637,12 +777,14 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                         ],
                       ),
                     ),
-                  
+
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: _isSaving ? null : () => Navigator.pop(context),
+                          onPressed: _isSaving
+                              ? null
+                              : () => Navigator.pop(context),
                           child: const Text('Cancelar'),
                         ),
                       ),
@@ -650,7 +792,8 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                       Expanded(
                         flex: 2,
                         child: FilledButton.icon(
-                          onPressed: _isSaving ||
+                          onPressed:
+                              _isSaving ||
                                   _clienteSeleccionado == null ||
                                   _plataformaSeleccionada == null ||
                                   _cuentaSeleccionada == null ||
@@ -667,7 +810,9 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
                                   ),
                                 )
                               : const Icon(Icons.flash_on),
-                          label: Text(_isSaving ? 'Creando...' : 'Crear Suscripción'),
+                          label: Text(
+                            _isSaving ? 'Creando...' : 'Crear Suscripción',
+                          ),
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),

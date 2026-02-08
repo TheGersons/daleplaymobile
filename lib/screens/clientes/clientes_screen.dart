@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/cliente.dart';
 import '../../services/supabase_service.dart';
+import '../../models/suscripcion.dart';
+import '../../models/plataforma.dart';
+import '../../models/perfil.dart';
+import '../../models/cuenta_correo.dart';
+import 'cliente_detalle_dialog.dart';
 
 class ClientesScreen extends StatefulWidget {
   const ClientesScreen({super.key});
@@ -14,6 +19,10 @@ class _ClientesScreenState extends State<ClientesScreen> {
   final _supabaseService = SupabaseService();
   List<Cliente> _clientes = [];
   List<Cliente> _clientesFiltrados = [];
+  List<Suscripcion> _suscripciones = [];
+  List<Plataforma> _plataformas = [];
+  List<Perfil> _perfiles = [];
+  List<CuentaCorreo> _cuentas = [];
   bool _isLoading = true;
   String _filtroEstado = 'todos';
   final _searchController = TextEditingController();
@@ -32,18 +41,27 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
   Future<void> _cargarClientes() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final clientes = await _supabaseService.obtenerClientes();
+      final suscripciones = await _supabaseService.obtenerSuscripciones();
+      final plataformas = await _supabaseService.obtenerPlataformas();
+      final perfiles = await _supabaseService.obtenerPerfiles();
+      final cuentas = await _supabaseService.obtenerCuentas();
+
       setState(() {
         _clientes = clientes;
+        _suscripciones = suscripciones;
+        _plataformas = plataformas;
+        _perfiles = perfiles;
+        _cuentas = cuentas;
         _aplicarFiltros();
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar clientes: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al cargar clientes: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -61,13 +79,33 @@ class _ClientesScreenState extends State<ClientesScreen> {
     // Filtro por búsqueda
     final query = _searchController.text.toLowerCase();
     if (query.isNotEmpty) {
-      filtrados = filtrados.where((c) =>
-        c.nombreCompleto.toLowerCase().contains(query) ||
-        c.telefono.contains(query)
-      ).toList();
+      filtrados = filtrados
+          .where(
+            (c) =>
+                c.nombreCompleto.toLowerCase().contains(query) ||
+                c.telefono.contains(query),
+          )
+          .toList();
     }
 
     setState(() => _clientesFiltrados = filtrados);
+  }
+
+  void _mostrarDetalleCliente(Cliente cliente) {
+    showDialog(
+      context: context,
+      builder: (context) => ClienteDetalleDialog(
+        cliente: cliente,
+        suscripciones: _suscripciones,
+        plataformas: _plataformas,
+        perfiles: _perfiles,
+        cuentas: _cuentas,
+        onEditar: () {
+          Navigator.pop(context);
+          _mostrarDialogoCliente(cliente);
+        },
+      ),
+    );
   }
 
   void _mostrarDialogoCliente([Cliente? cliente]) {
@@ -110,16 +148,16 @@ class _ClientesScreenState extends State<ClientesScreen> {
       try {
         await _supabaseService.eliminarCliente(cliente.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cliente eliminado')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Cliente eliminado')));
           _cargarClientes();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al eliminar: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
         }
       }
     }
@@ -202,46 +240,50 @@ class _ClientesScreenState extends State<ClientesScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _clientesFiltrados.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_off, size: 80, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              _clientes.isEmpty
-                                  ? 'No hay clientes registrados'
-                                  : 'No se encontraron clientes',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _clientes.isEmpty
-                                  ? 'Agrega tu primer cliente'
-                                  : 'Intenta con otro filtro',
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_off,
+                          size: 80,
+                          color: Colors.grey[400],
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _cargarClientes,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _clientesFiltrados.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final cliente = _clientesFiltrados[index];
-                            return _buildClienteCard(cliente);
-                          },
+                        const SizedBox(height: 16),
+                        Text(
+                          _clientes.isEmpty
+                              ? 'No hay clientes registrados'
+                              : 'No se encontraron clientes',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(color: Colors.grey[600]),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _clientes.isEmpty
+                              ? 'Agrega tu primer cliente'
+                              : 'Intenta con otro filtro',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _cargarClientes,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _clientesFiltrados.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final cliente = _clientesFiltrados[index];
+                        return _buildClienteCard(cliente);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_clientes",
         onPressed: () => _mostrarDialogoCliente(),
         icon: const Icon(Icons.person_add),
         label: const Text('Nuevo Cliente'),
@@ -256,7 +298,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _mostrarDialogoCliente(cliente),
+        onTap: () => _mostrarDetalleCliente(cliente),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -318,9 +360,15 @@ class _ClientesScreenState extends State<ClientesScreen> {
                                 color: Colors.blue,
                               ),
                               onPressed: () {
-                                Clipboard.setData(ClipboardData(text: cliente.telefono));
+                                Clipboard.setData(
+                                  ClipboardData(text: cliente.telefono),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Teléfono copiado al portapapeles')),
+                                  const SnackBar(
+                                    content: Text(
+                                      'Teléfono copiado al portapapeles',
+                                    ),
+                                  ),
                                 );
                               },
                             ),
@@ -350,6 +398,11 @@ class _ClientesScreenState extends State<ClientesScreen> {
                         color: isActivo ? Colors.green[700] : Colors.grey[700],
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20),
+                    onPressed: () => _mostrarDialogoCliente(cliente),
+                    tooltip: 'Editar cliente',
                   ),
                 ],
               ),
@@ -400,11 +453,7 @@ class ClienteDialog extends StatefulWidget {
   final Cliente? cliente;
   final VoidCallback onGuardar;
 
-  const ClienteDialog({
-    super.key,
-    this.cliente,
-    required this.onGuardar,
-  });
+  const ClienteDialog({super.key, this.cliente, required this.onGuardar});
 
   @override
   State<ClienteDialog> createState() => _ClienteDialogState();
@@ -413,11 +462,11 @@ class ClienteDialog extends StatefulWidget {
 class _ClienteDialogState extends State<ClienteDialog> {
   final _formKey = GlobalKey<FormState>();
   final _supabaseService = SupabaseService();
-  
+
   late TextEditingController _nombreController;
   late TextEditingController _telefonoController;
   late TextEditingController _notasController;
-  
+
   String _estadoSeleccionado = 'activo';
   bool _isLoading = false;
 
@@ -451,8 +500,8 @@ class _ClienteDialogState extends State<ClienteDialog> {
         telefono: _telefonoController.text.trim(),
         estado: _estadoSeleccionado,
         fechaRegistro: widget.cliente?.fechaRegistro ?? DateTime.now(),
-        notas: _notasController.text.trim().isEmpty 
-            ? null 
+        notas: _notasController.text.trim().isEmpty
+            ? null
             : _notasController.text.trim(),
       );
 
@@ -466,9 +515,7 @@ class _ClienteDialogState extends State<ClienteDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              widget.cliente == null
-                  ? 'Cliente creado'
-                  : 'Cliente actualizado',
+              widget.cliente == null ? 'Cliente creado' : 'Cliente actualizado',
             ),
           ),
         );
@@ -476,9 +523,9 @@ class _ClienteDialogState extends State<ClienteDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {

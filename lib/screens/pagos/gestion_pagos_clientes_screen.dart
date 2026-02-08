@@ -448,6 +448,7 @@ class _GestionPagosClientesScreenState
 
       // Continuará con Card, Dialogs...
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_pagos",
         onPressed: () => _mostrarDialogoPago(),
         icon: const Icon(Icons.add),
         label: const Text('Registrar Pago'),
@@ -1059,8 +1060,10 @@ class _PagoDialogState extends State<PagoDialog> {
       );
 
       if (_esEdicion) {
+        print('Actualizando pago: ${pago.id}');
         await _supabaseService.actualizarPago(pago);
       } else {
+        print('Creando nuevo pago para suscripción: ${pago.suscripcionId}');
         await _supabaseService.crearPago(pago);
       }
 

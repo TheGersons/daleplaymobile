@@ -516,6 +516,7 @@ class _PagosPlataformaScreenState extends State<PagosPlataformaScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_pagos_plataforma",
         onPressed: () => _mostrarDialogoPago(),
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Pago'),

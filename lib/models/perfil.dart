@@ -2,7 +2,7 @@ class Perfil {
   final String id;
   final String cuentaId;
   final String nombrePerfil;
-  final String pin;
+  final String? pin;
   final String estado;
   final DateTime fechaCreacion;
 

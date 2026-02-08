@@ -1,15 +1,19 @@
+// ACTUALIZAR modelo Alerta (alerta.dart)
+// Agregar campo suscripcionId
+
 class Alerta {
   final String id;
-  final String tipoAlerta; // cobro_cliente, pago_plataforma
-  final String tipoEntidad; // suscripcion, pago_plataforma
+  final String tipoAlerta;
+  final String tipoEntidad;
   final String entidadId;
   final String? clienteId;
   final String? plataformaId;
-  final String nivel; // normal, advertencia, urgente, critico
+  final String? suscripcionId; // ← NUEVO CAMPO
+  final String nivel;
   final int? diasRestantes;
   final double? monto;
   final String mensaje;
-  final String estado; // pendiente, enviada, leida, resuelta
+  final String estado;
   final DateTime fechaCreacion;
   final DateTime? fechaEnvioEmail;
   final String? emailEnviadoA;
@@ -21,6 +25,7 @@ class Alerta {
     required this.entidadId,
     this.clienteId,
     this.plataformaId,
+    this.suscripcionId, // ← NUEVO
     required this.nivel,
     this.diasRestantes,
     this.monto,
@@ -39,11 +44,12 @@ class Alerta {
       entidadId: json['entidad_id'],
       clienteId: json['cliente_id'],
       plataformaId: json['plataforma_id'],
+      suscripcionId: json['suscripcion_id'], // ← NUEVO
       nivel: json['nivel'],
       diasRestantes: json['dias_restantes'],
-      monto: json['monto'] != null ? (json['monto'] as num).toDouble() : null,
+      monto: json['monto']?.toDouble(),
       mensaje: json['mensaje'],
-      estado: json['estado'] ?? 'pendiente',
+      estado: json['estado'],
       fechaCreacion: DateTime.parse(json['fecha_creacion']),
       fechaEnvioEmail: json['fecha_envio_email'] != null
           ? DateTime.parse(json['fecha_envio_email'])
@@ -53,12 +59,14 @@ class Alerta {
   }
 
   Map<String, dynamic> toJson() {
-    final map = {
+    return {
+      'id': id,
       'tipo_alerta': tipoAlerta,
       'tipo_entidad': tipoEntidad,
       'entidad_id': entidadId,
       'cliente_id': clienteId,
       'plataforma_id': plataformaId,
+      'suscripcion_id': suscripcionId, // ← NUEVO
       'nivel': nivel,
       'dias_restantes': diasRestantes,
       'monto': monto,
@@ -68,11 +76,5 @@ class Alerta {
       'fecha_envio_email': fechaEnvioEmail?.toIso8601String(),
       'email_enviado_a': emailEnviadoA,
     };
-    
-    if (id.isNotEmpty && id != '00000000-0000-0000-0000-000000000000') {
-      map['id'] = id;
-    }
-    
-    return map;
   }
 }

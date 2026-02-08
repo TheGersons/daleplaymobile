@@ -76,9 +76,9 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cargando datos: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error cargando datos: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -90,40 +90,58 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     final query = _searchController.text.toLowerCase().trim();
     final queryClean = query.replaceAll('-', '');
 
-    // 1. Filtrado (Igual que antes...)
+    // 1. Filtrado
     if (query.isNotEmpty) {
       lista = lista.where((p) {
-        bool matchPerfil = p.nombrePerfil.toLowerCase().contains(query) || 
-                           p.pin.contains(query);
-        bool matchCliente = false;
+        // Coincidencia con nombre del perfil o PIN
+        bool matchPerfil =
+            p.nombrePerfil.toLowerCase().contains(query) ||
+            (p.pin?.contains(query) ?? false);
+
+        // NUEVO: Coincidencia con email de cuenta
+        bool matchEmail = false;
         try {
-          final suscripcion = _suscripciones.firstWhere((s) => s.perfilId == p.id && s.estado == 'activa');
-          final cliente = _clientes.firstWhere((c) => c.id == suscripcion.clienteId);
-          if (cliente.nombreCompleto.toLowerCase().contains(query)) matchCliente = true;
-          if (!matchCliente) {
-             final telClienteClean = cliente.telefono.replaceAll('-', '');
-             if (telClienteClean.contains(queryClean)) matchCliente = true;
+          final cuenta = _cuentas.firstWhere((c) => c.id == p.cuentaId);
+          if (cuenta.email.toLowerCase().contains(query)) {
+            matchEmail = true;
           }
         } catch (_) {}
-        return matchPerfil || matchCliente;
+
+        // Coincidencia con cliente asignado
+        bool matchCliente = false;
+        try {
+          final suscripcion = _suscripciones.firstWhere(
+            (s) => s.perfilId == p.id && s.estado == 'activa',
+          );
+          final cliente = _clientes.firstWhere(
+            (c) => c.id == suscripcion.clienteId,
+          );
+          if (cliente.nombreCompleto.toLowerCase().contains(query))
+            matchCliente = true;
+          if (!matchCliente) {
+            final telClienteClean = cliente.telefono.replaceAll('-', '');
+            if (telClienteClean.contains(queryClean)) matchCliente = true;
+          }
+        } catch (_) {}
+
+        return matchPerfil ||
+            matchEmail ||
+            matchCliente; // ← AGREGADO: matchEmail
       }).toList();
     }
 
-    // 2. Estado (Igual que antes...)
+    // 2. Estado
     if (_filtroEstado != 'todos') {
       lista = lista.where((p) => p.estado == _filtroEstado).toList();
     }
 
-    // 3. Ordenamiento (MODIFICADO)
+    // 3. Ordenamiento
     lista.sort((a, b) {
-      // --- REGLA DE ORO: Disponibles siempre arriba ---
-      // Si A es disponible y B no, A va primero (-1)
+      // Disponibles siempre arriba
       if (a.estado == 'disponible' && b.estado != 'disponible') return -1;
-      // Si A no es disponible y B si, B va primero (1)
       if (a.estado != 'disponible' && b.estado == 'disponible') return 1;
-      
-      // Si ambos tienen el mismo estado (ambos disponibles o ambos ocupados), 
-      // desempatamos con el criterio seleccionado:
+
+      // Desempate con criterio seleccionado
       int result = 0;
       switch (_ordenarPor) {
         case 'nombre':
@@ -149,14 +167,30 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
 
   String _obtenerNombrePlataforma(String cuentaId) {
     final cuenta = _cuentas.firstWhere(
-      (c) => c.id == cuentaId, 
-      orElse: () => CuentaCorreo(id: '', plataformaId: '', email: '', password: '', estado: '', fechaCreacion: DateTime.now())
+      (c) => c.id == cuentaId,
+      orElse: () => CuentaCorreo(
+        id: '',
+        plataformaId: '',
+        email: '',
+        password: '',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
     );
     if (cuenta.id.isEmpty) return 'ZZZ';
 
     final plat = _plataformas.firstWhere(
-      (p) => p.id == cuenta.plataformaId, 
-      orElse: () => Plataforma(id: '', nombre: 'ZZZ', icono: '', precioBase: 0, maxPerfiles: 0, color: '#000000', estado: '', fechaCreacion: DateTime.now())
+      (p) => p.id == cuenta.plataformaId,
+      orElse: () => Plataforma(
+        id: '',
+        nombre: 'ZZZ',
+        icono: '',
+        precioBase: 0,
+        maxPerfiles: 0,
+        color: '#000000',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
     );
     return plat.nombre;
   }
@@ -164,10 +198,14 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
   // --- ACTIONS ---
 
   Future<void> _eliminarPerfil(Perfil perfil) async {
-    final tieneSuscripcion = _suscripciones.any((s) => s.perfilId == perfil.id && s.estado == 'activa');
+    final tieneSuscripcion = _suscripciones.any(
+      (s) => s.perfilId == perfil.id && s.estado == 'activa',
+    );
     if (tieneSuscripcion) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se puede eliminar: Perfil ocupado por cliente.')),
+        const SnackBar(
+          content: Text('No se puede eliminar: Perfil ocupado por cliente.'),
+        ),
       );
       return;
     }
@@ -178,7 +216,10 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
         title: const Text('Eliminar Perfil'),
         content: Text('¿Eliminar "${perfil.nombrePerfil}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -192,12 +233,16 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
       try {
         await _supabaseService.eliminarPerfil(perfil.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil eliminado')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Perfil eliminado')));
           _cargarDatos();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       }
     }
@@ -218,6 +263,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
       ),
     );
   }
+
   void _mostrarFiltros() {
     showDialog(
       context: context,
@@ -231,7 +277,10 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
               decoration: const InputDecoration(labelText: 'Estado'),
               items: const [
                 DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                DropdownMenuItem(value: 'disponible', child: Text('Disponible')),
+                DropdownMenuItem(
+                  value: 'disponible',
+                  child: Text('Disponible'),
+                ),
                 DropdownMenuItem(value: 'ocupado', child: Text('Ocupado')),
               ],
               onChanged: (v) => setState(() => _filtroEstado = v!),
@@ -241,7 +290,10 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
               value: _ordenarPor,
               decoration: const InputDecoration(labelText: 'Ordenar por'),
               items: const [
-                DropdownMenuItem(value: 'plataforma', child: Text('Plataforma')),
+                DropdownMenuItem(
+                  value: 'plataforma',
+                  child: Text('Plataforma'),
+                ),
                 DropdownMenuItem(value: 'nombre', child: Text('Nombre Perfil')),
                 DropdownMenuItem(value: 'estado', child: Text('Estado')),
               ],
@@ -261,7 +313,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
               Navigator.pop(ctx);
             },
             child: const Text('Aplicar'),
-          )
+          ),
         ],
       ),
     );
@@ -284,8 +336,12 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                     decoration: InputDecoration(
                       hintText: 'Buscar perfil, PIN, cliente...',
                       prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear),
@@ -313,34 +369,42 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _perfilesFiltrados.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_search_outlined, size: 64, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No se encontraron perfiles',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_search_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _cargarDatos,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _perfilesFiltrados.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            return _buildPerfilCard(_perfilesFiltrados[index]);
-                          },
+                        const SizedBox(height: 16),
+                        Text(
+                          'No se encontraron perfiles',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
                         ),
-                      ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _cargarDatos,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _perfilesFiltrados.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        return _buildPerfilCard(_perfilesFiltrados[index]);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_perfiles",
         onPressed: () => _abrirDialogo(),
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Perfil'),
@@ -352,12 +416,28 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     // Relaciones
     final cuenta = _cuentas.firstWhere(
       (c) => c.id == perfil.cuentaId,
-      orElse: () => CuentaCorreo(id: '', plataformaId: '', email: 'Eliminada', password: '', estado: '', fechaCreacion: DateTime.now()),
+      orElse: () => CuentaCorreo(
+        id: '',
+        plataformaId: '',
+        email: 'Eliminada',
+        password: '',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
     );
-    
+
     final plataforma = _plataformas.firstWhere(
       (p) => p.id == cuenta.plataformaId,
-      orElse: () => Plataforma(id: '', nombre: 'Desconocida', icono: '', precioBase: 0, maxPerfiles: 0, color: '#808080', estado: '', fechaCreacion: DateTime.now()),
+      orElse: () => Plataforma(
+        id: '',
+        nombre: 'Desconocida',
+        icono: '',
+        precioBase: 0,
+        maxPerfiles: 0,
+        color: '#808080',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
     );
 
     // Búsqueda de ocupación
@@ -375,7 +455,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
 
     final colorPlataforma = _parseColor(plataforma.color);
     final isOccupied = perfil.estado == 'ocupado';
-    
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -389,7 +469,9 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: colorPlataforma.withOpacity(0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
@@ -409,16 +491,24 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                       ),
                       Text(
                         cuenta.email,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: isOccupied ? Colors.orange.withOpacity(0.2) : Colors.green.withOpacity(0.2),
+                    color: isOccupied
+                        ? Colors.orange.withOpacity(0.2)
+                        : Colors.green.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isOccupied ? Colors.orange : Colors.green,
@@ -430,7 +520,9 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: isOccupied ? Colors.orange[800] : Colors.green[800],
+                      color: isOccupied
+                          ? Colors.orange[800]
+                          : Colors.green[800],
                     ),
                   ),
                 ),
@@ -448,62 +540,101 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                   radius: 24,
                   backgroundColor: Colors.grey[200],
                   child: Text(
-                    perfil.nombrePerfil.isNotEmpty ? perfil.nombrePerfil[0].toUpperCase() : '#',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                    perfil.nombrePerfil.isNotEmpty
+                        ? perfil.nombrePerfil[0].toUpperCase()
+                        : '#',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         perfil.nombrePerfil,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.lock_outline, size: 14, color: Colors.grey[600]),
+                          Icon(
+                            Icons.lock_outline,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'PIN: ${perfil.pin}',
-                            style: const TextStyle(fontSize: 14, fontFamily: 'Monospace'),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontFamily: 'Monospace',
+                            ),
                           ),
                           const SizedBox(width: 8),
                           InkWell(
                             onTap: () {
-                              Clipboard.setData(ClipboardData(text: perfil.pin));
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Copiado'), duration: Duration(milliseconds: 500)));
+                              Clipboard.setData(
+                                ClipboardData(text: perfil.pin ?? ''),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('PIN Copiado'),
+                                  duration: Duration(milliseconds: 500),
+                                ),
+                              );
                             },
-                            child: const Icon(Icons.copy, size: 14, color: Colors.blue),
-                          )
+                            child: const Icon(
+                              Icons.copy,
+                              size: 14,
+                              color: Colors.blue,
+                            ),
+                          ),
                         ],
                       ),
-                      
+
                       if (isOccupied && clienteAsignado != null) ...[
                         const SizedBox(height: 8),
                         const Divider(height: 12),
                         Row(
                           children: [
-                            const Icon(Icons.person, size: 14, color: Colors.grey),
+                            const Icon(
+                              Icons.person,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 '${clienteAsignado.nombreCompleto} • ${clienteAsignado.telefono}',
-                                style: TextStyle(fontSize: 12, color: Colors.white),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
                         if (suscripcionActiva != null)
-                           Text(
-                             'Vence: ${DateFormat('dd/MM/yyyy').format(suscripcionActiva.fechaProximoPago)}',
-                             style: TextStyle(fontSize: 11, color: _getColorFecha(suscripcionActiva.fechaProximoPago)),
-                           ),
-                      ]
+                          Text(
+                            'Vence: ${DateFormat('dd/MM/yyyy').format(suscripcionActiva.fechaProximoPago)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _getColorFecha(
+                                suscripcionActiva.fechaProximoPago,
+                              ),
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -516,12 +647,16 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                       tooltip: 'Editar',
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                      icon: const Icon(
+                        Icons.delete,
+                        size: 20,
+                        color: Colors.red,
+                      ),
                       onPressed: () => _eliminarPerfil(perfil),
                       tooltip: 'Eliminar',
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -531,7 +666,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
   }
 
   // --- HELPERS VISUALES ---
-  
+
   Color _parseColor(String hexString) {
     try {
       final buffer = StringBuffer();
@@ -598,14 +733,22 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
           child: CachedNetworkImage(
             imageUrl: logoUrl,
             fit: BoxFit.contain,
-            errorWidget: (_, __, ___) => FaIcon(FontAwesomeIcons.tv, size: size * 0.6, color: Colors.grey),
+            errorWidget: (_, __, ___) => FaIcon(
+              FontAwesomeIcons.tv,
+              size: size * 0.6,
+              color: Colors.grey,
+            ),
           ),
         ),
       );
     }
-    
+
     // Fallback: Icono coloreado
-    return FaIcon(FontAwesomeIcons.tv, size: size, color: _parseColor(plataforma.color));
+    return FaIcon(
+      FontAwesomeIcons.tv,
+      size: size,
+      color: _parseColor(plataforma.color),
+    );
   }
 }
 
@@ -637,13 +780,13 @@ class _PerfilDialogState extends State<PerfilDialog> {
 
   late TextEditingController _nombreController;
   late TextEditingController _pinController;
-  
+
   String? _cuentaSeleccionadaId;
   String _estadoSeleccionado = 'disponible';
   bool _isLoading = false;
-  
+
   // Variable para saber si está bloqueado por uso
-  bool _tieneSuscripcionActiva = false; 
+  bool _tieneSuscripcionActiva = false;
 
   @override
   void initState() {
@@ -657,7 +800,7 @@ class _PerfilDialogState extends State<PerfilDialog> {
     // VERIFICACIÓN: ¿Este perfil tiene una suscripción activa?
     if (p != null) {
       _tieneSuscripcionActiva = widget.suscripciones.any(
-        (s) => s.perfilId == p.id && s.estado == 'activa'
+        (s) => s.perfilId == p.id && s.estado == 'activa',
       );
     }
   }
@@ -675,7 +818,7 @@ class _PerfilDialogState extends State<PerfilDialog> {
 
     try {
       final nuevoPerfil = Perfil(
-        id: widget.perfil?.id ?? '', 
+        id: widget.perfil?.id ?? '',
         cuentaId: _cuentaSeleccionadaId!,
         nombrePerfil: _nombreController.text.trim(),
         pin: _pinController.text.trim(),
@@ -688,16 +831,22 @@ class _PerfilDialogState extends State<PerfilDialog> {
       } else {
         await _supabaseService.actualizarPerfil(nuevoPerfil);
       }
-      
+
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text(widget.perfil == null ? 'Perfil creado' : 'Perfil actualizado')),
-         );
-         widget.onGuardar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.perfil == null ? 'Perfil creado' : 'Perfil actualizado',
+            ),
+          ),
+        );
+        widget.onGuardar();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -708,8 +857,36 @@ class _PerfilDialogState extends State<PerfilDialog> {
   Widget build(BuildContext context) {
     final cuentasOrdenadas = List<CuentaCorreo>.from(widget.cuentas);
     cuentasOrdenadas.sort((a, b) {
-      final platA = widget.plataformas.firstWhere((p) => p.id == a.plataformaId, orElse: () => Plataforma(id: '', nombre: 'Z', icono: '', precioBase: 0, maxPerfiles: 0, color: '', estado: '', fechaCreacion: DateTime.now())).nombre;
-      final platB = widget.plataformas.firstWhere((p) => p.id == b.plataformaId, orElse: () => Plataforma(id: '', nombre: 'Z', icono: '', precioBase: 0, maxPerfiles: 0, color: '', estado: '', fechaCreacion: DateTime.now())).nombre;
+      final platA = widget.plataformas
+          .firstWhere(
+            (p) => p.id == a.plataformaId,
+            orElse: () => Plataforma(
+              id: '',
+              nombre: 'Z',
+              icono: '',
+              precioBase: 0,
+              maxPerfiles: 0,
+              color: '',
+              estado: '',
+              fechaCreacion: DateTime.now(),
+            ),
+          )
+          .nombre;
+      final platB = widget.plataformas
+          .firstWhere(
+            (p) => p.id == b.plataformaId,
+            orElse: () => Plataforma(
+              id: '',
+              nombre: 'Z',
+              icono: '',
+              precioBase: 0,
+              maxPerfiles: 0,
+              color: '',
+              estado: '',
+              fechaCreacion: DateTime.now(),
+            ),
+          )
+          .nombre;
       return platA.compareTo(platB);
     });
 
@@ -723,126 +900,168 @@ class _PerfilDialogState extends State<PerfilDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                 Text(
-                   widget.perfil == null ? 'Nuevo Perfil' : 'Editar Perfil',
-                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                 ),
-                 
-                 // Aviso si está bloqueado
-                 if (_tieneSuscripcionActiva)
-                   Container(
-                     margin: const EdgeInsets.only(top: 16),
-                     padding: const EdgeInsets.all(8),
-                     decoration: BoxDecoration(
-                       color: Colors.orange[50],
-                       borderRadius: BorderRadius.circular(8),
-                       border: Border.all(color: Colors.orange),
-                     ),
-                     child: Row(
-                       children: [
-                         Icon(Icons.warning_amber, color: Colors.orange[800], size: 20),
-                         const SizedBox(width: 8),
-                         Expanded(
-                           child: Text(
-                             'Edición restringida: Este perfil está asignado a un cliente activo.',
-                             style: TextStyle(color: Colors.orange[900], fontSize: 12),
-                           ),
-                         ),
-                       ],
-                     ),
-                   ),
+                Text(
+                  widget.perfil == null ? 'Nuevo Perfil' : 'Editar Perfil',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
 
-                 const SizedBox(height: 20),
-
-                 DropdownButtonFormField<String>(
-                   value: _cuentaSeleccionadaId,
-                   // BLOQUEO: No se puede cambiar de cuenta si está activo
-                   onChanged: _tieneSuscripcionActiva ? null : (v) => setState(() => _cuentaSeleccionadaId = v),
-                   decoration: const InputDecoration(
-                     labelText: 'Cuenta asociada *',
-                     border: OutlineInputBorder(),
-                     prefixIcon: Icon(Icons.email),
-                   ),
-                   items: cuentasOrdenadas.map((c) {
-                      final plat = widget.plataformas.firstWhere(
-                        (p) => p.id == c.plataformaId, 
-                        orElse: () => Plataforma(id: '', nombre: '?', icono: '', precioBase: 0, maxPerfiles: 0, color: '', estado: '', fechaCreacion: DateTime.now())
-                      );
-                      return DropdownMenuItem(
-                        value: c.id,
-                        child: Text(
-                          '${plat.nombre} - ${c.email}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13),
+                // Aviso si está bloqueado
+                if (_tieneSuscripcionActiva)
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber,
+                          color: Colors.orange[800],
+                          size: 20,
                         ),
-                      );
-                   }).toList(),
-                   validator: (v) => v == null ? 'Selecciona una cuenta' : null,
-                   isExpanded: true,
-                 ),
-                 const SizedBox(height: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Edición restringida: Este perfil está asignado a un cliente activo.',
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                 TextFormField(
-                   controller: _nombreController,
-                   decoration: const InputDecoration(
-                     labelText: 'Nombre del Perfil *',
-                     border: OutlineInputBorder(),
-                     prefixIcon: Icon(Icons.face),
-                   ),
-                   validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                 ),
-                 const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                 TextFormField(
-                   controller: _pinController,
-                   decoration: const InputDecoration(
-                     labelText: 'PIN (4 dígitos) *',
-                     border: OutlineInputBorder(),
-                     prefixIcon: Icon(Icons.lock_outline),
-                   ),
-                   keyboardType: TextInputType.number,
-                   maxLength: 4,
-                   validator: (v) {
-                     if (v!.isEmpty) return 'Requerido';
-                     if (v.length != 4) return 'Debe tener 4 dígitos';
-                     return null;
-                   },
-                 ),
-                 const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _cuentaSeleccionadaId,
+                  // BLOQUEO: No se puede cambiar de cuenta si está activo
+                  onChanged: _tieneSuscripcionActiva
+                      ? null
+                      : (v) => setState(() => _cuentaSeleccionadaId = v),
+                  decoration: const InputDecoration(
+                    labelText: 'Cuenta asociada *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  items: cuentasOrdenadas.map((c) {
+                    final plat = widget.plataformas.firstWhere(
+                      (p) => p.id == c.plataformaId,
+                      orElse: () => Plataforma(
+                        id: '',
+                        nombre: '?',
+                        icono: '',
+                        precioBase: 0,
+                        maxPerfiles: 0,
+                        color: '',
+                        estado: '',
+                        fechaCreacion: DateTime.now(),
+                      ),
+                    );
+                    return DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        '${plat.nombre} - ${c.email}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    );
+                  }).toList(),
+                  validator: (v) => v == null ? 'Selecciona una cuenta' : null,
+                  isExpanded: true,
+                ),
+                const SizedBox(height: 16),
 
-                 DropdownButtonFormField<String>(
-                   value: _estadoSeleccionado,
-                   // BLOQUEO: No se puede cambiar el estado si está activo
-                   onChanged: _tieneSuscripcionActiva ? null : (v) => setState(() => _estadoSeleccionado = v!),
-                   decoration: const InputDecoration(
-                     labelText: 'Estado',
-                     border: OutlineInputBorder(),
-                     prefixIcon: Icon(Icons.toggle_on),
-                     helperText: 'Bloqueado si hay suscripción activa',
-                   ),
-                   items: const [
-                     DropdownMenuItem(value: 'disponible', child: Text('Disponible')),
-                     DropdownMenuItem(value: 'ocupado', child: Text('Ocupado')),
-                   ],
-                 ),
-                 const SizedBox(height: 24),
+                TextFormField(
+                  controller: _nombreController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del Perfil *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.face),
+                  ),
+                  validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 16),
 
-                 Row(
-                   mainAxisAlignment: MainAxisAlignment.end,
-                   children: [
-                     TextButton(
-                       onPressed: _isLoading ? null : () => Navigator.pop(context),
-                       child: const Text('Cancelar'),
-                     ),
-                     const SizedBox(width: 8),
-                     FilledButton(
-                       onPressed: _isLoading ? null : _guardar,
-                       child: _isLoading 
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                // PIN (opcional)
+                TextFormField(
+                  controller: _pinController,
+                  decoration: const InputDecoration(
+                    labelText: 'PIN (opcional)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.pin),
+                    hintText: '4 dígitos',
+                    helperText:
+                        'Deje en blanco para no usar PIN', // Ayuda visual al usuario
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  validator: (v) {
+                    // Si el usuario no escribe nada, no hay error
+                    if (v == null || v.isEmpty) return null;
+                    // Solo validamos longitud si hay texto
+                    if (v.length < 4) return 'El PIN debe tener 4 dígitos';
+                    return null;
+                  },
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
+
+                DropdownButtonFormField<String>(
+                  value: _estadoSeleccionado,
+                  // BLOQUEO: No se puede cambiar el estado si está activo
+                  onChanged: _tieneSuscripcionActiva
+                      ? null
+                      : (v) => setState(() => _estadoSeleccionado = v!),
+                  decoration: const InputDecoration(
+                    labelText: 'Estado',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.toggle_on),
+                    helperText: 'Bloqueado si hay suscripción activa',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'disponible',
+                      child: Text('Disponible'),
+                    ),
+                    DropdownMenuItem(value: 'ocupado', child: Text('Ocupado')),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _isLoading ? null : _guardar,
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Text('Guardar'),
-                     ),
-                   ],
-                 )
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

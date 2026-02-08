@@ -111,9 +111,37 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
           ),
         );
 
+        // NUEVO: Obtener email de la cuenta a través del perfil
+        final perfil = _perfiles.firstWhere(
+          (p) => p.id == s.perfilId,
+          orElse: () => Perfil(
+            id: '',
+            cuentaId: '',
+            pin: '',
+            nombrePerfil: '',
+            estado: '',
+            fechaCreacion: DateTime.now(),
+          ),
+        );
+
+        final cuenta = _cuentas.firstWhere(
+          (c) => c.id == perfil.cuentaId,
+          orElse: () => CuentaCorreo(
+            id: '',
+            email: '',
+            password: '',
+            plataformaId: '',
+            estado: '',
+            fechaCreacion: DateTime.now(),
+          ),
+        );
+
         return cliente.nombreCompleto.toLowerCase().contains(query) ||
-            plataforma.nombre.toLowerCase().contains(query) || 
-            cliente.telefono.toLowerCase().contains(query);
+            plataforma.nombre.toLowerCase().contains(query) ||
+            cliente.telefono.toLowerCase().contains(query) ||
+            cuenta.email.toLowerCase().contains(
+              query,
+            ); // ← NUEVO: Buscar por email
       }).toList();
     }
 
@@ -229,35 +257,83 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
   }
 
   void _mostrarDetalleSuscripcion(Suscripcion suscripcion) {
+    // Obtener datos con protección
+    final cliente = _clientes.firstWhere(
+      (c) => c.id == suscripcion.clienteId,
+      orElse: () => Cliente(
+        id: '',
+        nombreCompleto: 'N/A',
+        telefono: '',
+        estado: '',
+        fechaRegistro: DateTime.now(),
+      ),
+    );
+
+    final plataforma = _plataformas.firstWhere(
+      (p) => p.id == suscripcion.plataformaId,
+      orElse: () => Plataforma(
+        id: '',
+        nombre: 'N/A',
+        icono: '',
+        precioBase: 0,
+        maxPerfiles: 0,
+        color: '#999999',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
+    );
+
+    final perfil = _perfiles.firstWhere(
+      (p) => p.id == suscripcion.perfilId,
+      orElse: () => Perfil(
+        id: '',
+        pin: '',
+        cuentaId: '',
+        nombrePerfil: 'N/A',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
+    );
+
+    final cuenta = _cuentas.firstWhere(
+      (c) => c.id == perfil.cuentaId,
+      orElse: () => CuentaCorreo(
+        id: '',
+        email: 'N/A',
+        password: '',
+        plataformaId: '',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
+    );
+
     showDialog(
       context: context,
       builder: (context) => SuscripcionDetalleDialog(
         suscripcion: suscripcion,
-        cliente: _clientes.firstWhere((c) => c.id == suscripcion.clienteId),
-        plataforma: _plataformas.firstWhere(
-          (p) => p.id == suscripcion.plataformaId,
-        ),
-        perfil: _perfiles.firstWhere((p) => p.id == suscripcion.perfilId),
-        cuenta: _cuentas.firstWhere(
-          (c) =>
-              c.id ==
-              _perfiles
-                  .firstWhere((p) => p.id == suscripcion.perfilId)
-                  .cuentaId,
-        ),
+        cliente: cliente,
+        plataforma: plataforma,
+        perfil: perfil,
+        cuenta: cuenta,
       ),
     );
   }
 
   Future<void> _eliminarSuscripcion(Suscripcion suscripcion) async {
-    final cliente = _clientes.firstWhere((c) => c.id == suscripcion.clienteId);
+    // Intentar obtener cliente, pero no es crítico
+    final nombreCliente =
+        _clientes
+            .where((c) => c.id == suscripcion.clienteId)
+            .map((c) => c.nombreCompleto)
+            .firstOrNull ??
+        'Cliente desconocido';
 
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar Suscripción'),
         content: Text(
-          '¿Estás seguro de eliminar la suscripción de "${cliente.nombreCompleto}"?\n\n'
+          '¿Estás seguro de eliminar la suscripción de "$nombreCliente"?\n\n'
           'Esta acción no se puede deshacer.',
         ),
         actions: [
@@ -481,15 +557,41 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
                         final suscripcion = _suscripcionesFiltradas[index];
                         final cliente = _clientes.firstWhere(
                           (c) => c.id == suscripcion.clienteId,
+                          orElse: () => Cliente(
+                            id: '',
+                            nombreCompleto: 'N/A',
+                            telefono: '',
+                            estado: '',
+                            fechaRegistro: DateTime.now(),
+                          ),
                         );
                         final plataforma = _plataformas.firstWhere(
                           (p) => p.id == suscripcion.plataformaId,
+                          orElse: () => Plataforma(
+                            id: '',
+                            nombre: 'N/A',
+                            icono: '',
+                            precioBase: 0,
+                            maxPerfiles: 0,
+                            color: '#999999',
+                            estado: '',
+                            fechaCreacion: DateTime.now(),
+                          ),
                         );
                         //controlamos la excepcion que no hay elementos
 
                         final perfil = _perfiles.firstWhere(
-                        
+                          //exception here for no elements
                           (p) => p.id == suscripcion.perfilId,
+
+                          orElse: () => Perfil(
+                            id: '',
+                            pin: '',
+                            cuentaId: '',
+                            nombrePerfil: 'N/A',
+                            estado: '',
+                            fechaCreacion: DateTime.now(),
+                          ),
                         );
 
                         return _SuscripcionCard(
@@ -508,6 +610,7 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_suscripciones",
         onPressed: () => _mostrarDialogoSuscripcion(),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Suscripción'),
@@ -1095,18 +1198,64 @@ class _SuscripcionDialogState extends State<SuscripcionDialog> {
   void _cargarDatosEdicion() {
     final s = widget.suscripcion!;
 
+    // Cliente (con orElse)
     _clienteSeleccionado = widget.clientes.firstWhere(
       (c) => c.id == s.clienteId,
-    );
-    _plataformaSeleccionada = widget.plataformas.firstWhere(
-      (p) => p.id == s.plataformaId,
+      orElse: () => Cliente(
+        id: '',
+        nombreCompleto: 'N/A',
+        telefono: '',
+        estado: '',
+        fechaRegistro: DateTime.now(),
+      ),
     );
 
-    final perfil = widget.perfiles.firstWhere((p) => p.id == s.perfilId);
-    _perfilSeleccionado = perfil;
+    // Plataforma (con orElse)
+    _plataformaSeleccionada = widget.plataformas.firstWhere(
+      (p) => p.id == s.plataformaId,
+      orElse: () => Plataforma(
+        id: '',
+        nombre: 'N/A',
+        icono: '',
+        precioBase: 0,
+        maxPerfiles: 0,
+        color: '#999999',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
+    );
+
+    // Perfil (con orElse)
+    final perfil = widget.perfiles.firstWhere(
+      (p) => p.id == s.perfilId,
+      orElse: () => Perfil(
+        id: '',
+        pin: '',
+        cuentaId: '',
+        nombrePerfil: 'N/A',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
+    );
+    _perfilSeleccionado = perfil.id.isEmpty ? null : perfil;
+
+    // Cuenta (con orElse)
     _cuentaSeleccionada = widget.cuentas.firstWhere(
       (c) => c.id == perfil.cuentaId,
+      orElse: () => CuentaCorreo(
+        id: '',
+        email: 'N/A',
+        password: '',
+        plataformaId: '',
+        estado: '',
+        fechaCreacion: DateTime.now(),
+      ),
     );
+
+    // Si cuenta es N/A, resetear
+    if (_cuentaSeleccionada?.id.isEmpty == true) {
+      _cuentaSeleccionada = null;
+    }
 
     _costoController.text = s.precio.toStringAsFixed(2);
     _fechaInicio = s.fechaInicio;
@@ -1497,6 +1646,50 @@ class _SuscripcionDialogState extends State<SuscripcionDialog> {
                         ],
                       ),
                       const SizedBox(height: 16),
+
+                      // ADVERTENCIA si faltan datos
+                      if (_esEdicion &&
+                          (_perfilSeleccionado?.id.isEmpty ?? true))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            border: Border.all(color: Colors.orange),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber,
+                                color: Colors.orange.shade700,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Suscripción incompleta',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.orange.shade900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Esta suscripción no tiene perfil asignado. Selecciona uno para completarla.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                       // Estado
                       DropdownButtonFormField<String>(

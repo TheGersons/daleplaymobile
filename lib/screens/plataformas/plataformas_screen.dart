@@ -98,6 +98,9 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       //espacio para que no este pegada la primera card al appbar
+      appBar: AppBar(
+        title: const Text('Mis Plataformas'),
+      ),
       body: Container(
         padding: const EdgeInsets.only(top: 20),
         child: _isLoading
@@ -141,6 +144,7 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 32.0),
         child: FloatingActionButton.extended(
+          heroTag: "fab_plataformas",
           onPressed: () => _mostrarDialogoPlataforma(),
           icon: const Icon(Icons.add),
           label: const Text('Nueva Plataforma'),

@@ -1,3 +1,4 @@
+import 'package:daleplay/models/auth_user.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
@@ -16,7 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _supabaseService = SupabaseService();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -32,31 +33,74 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    try {
-      final user = await _supabaseService.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+    AuthUser? user;
+    int intento = 0;
 
+    while (user == null && mounted) {
+      try {
+        intento++;
+
+        user = await _supabaseService.login(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+
+        if (!mounted) return;
+
+        if (user != null) {
+          Provider.of<UserProvider>(context, listen: false).setUser(user);
+
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+          return;
+        } else {
+          setState(() => _isLoading = false);
+          _showError('Credenciales incorrectas o usuario inactivo');
+          return;
+        }
+      } catch (e) {
+        if (!mounted) return;
+
+        // Si es error de credenciales, no reintentar
+        if (e.toString().contains('incorrectas') ||
+            e.toString().contains('inactivo')) {
+          setState(() => _isLoading = false);
+          _showError('Credenciales incorrectas o usuario inactivo');
+          return;
+        }
+
+        // Si es error de red, reintentar
+        print('Intento #$intento fallido: $e');
+
+        if (intento < 5) {
+          // Primeros 5 intentos: esperar 1-2 segundos
+          await Future.delayed(Duration(seconds: intento > 2 ? 2 : 1));
+        } else {
+          // Después de 5 intentos, mostrar error y detener
+          setState(() => _isLoading = false);
+          _showError(
+            'Error de conexión. Verifica tu internet e intenta nuevamente.',
+          );
+          return;
+        }
+      }
+    }
+
+    if (user != null) {
       if (!mounted) return;
 
-      if (user != null) {
-        Provider.of<UserProvider>(context, listen: false).setUser(user);
-        
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else {
-        _showError('Credenciales incorrectas o usuario inactivo');
-      }
-    } catch (e) {
-      if (mounted) {
-        _showError('Error al iniciar sesión: ${e.toString()}');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      // Esto ahora dispara el guardado en SharedPreferences automáticamente
+      Provider.of<UserProvider>(context, listen: false).setUser(user);
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -119,16 +163,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         // Título
                         Text(
                           'DalePlay',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Gestión de Suscripciones',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey[600],
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 32),
 
@@ -168,7 +210,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     : Icons.visibility_off_outlined,
                               ),
                               onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                             ),
                             border: const OutlineInputBorder(),
