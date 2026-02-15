@@ -198,22 +198,25 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
             color: Colors.white,
           ),
         ),
-        subtitle: Row(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.phone, size: 14, color: Colors.white70),
-            const SizedBox(width: 6),
-            Container(
-              width: 40,
-              child: Text(
-                cliente.telefono,
-                style: const TextStyle(color: Colors.white70),
-              ),
+            Row(
+              children: [
+                const Icon(Icons.phone, size: 14, color: Colors.white70),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    cliente.telefono,
+                    style: const TextStyle(color: Colors.white70),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.copy, size: 14, color: Colors.blue),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () {
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
                 Clipboard.setData(ClipboardData(text: cliente.telefono));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -222,11 +225,26 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
                   ),
                 );
               },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.copy, size: 12, color: Colors.blue[300]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Copiar',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue[300],
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         trailing: SizedBox(
-          width: 140,
+          width: 180,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -240,7 +258,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
               FilledButton.icon(
                 onPressed: () => _marcarTodasRecordatorio(cliente, suscripciones),
                 icon: const Icon(Icons.check, size: 16),
-                label: const Text(''),
+                label: const Text('Todas'),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.green,
                   padding: const EdgeInsets.symmetric(
@@ -411,6 +429,9 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
     Cliente cliente,
     List<Suscripcion> suscripciones,
   ) async {
+    print('🟢 [SCREEN] Iniciando marcado masivo para: ${cliente.nombreCompleto}');
+    print('🟢 [SCREEN] Total de suscripciones: ${suscripciones.length}');
+    
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -433,10 +454,22 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
     );
 
     if (confirmar == true) {
+      print('🟢 [SCREEN] Usuario confirmó el marcado masivo');
+      
       try {
-        for (final suscripcion in suscripciones) {
+        for (int i = 0; i < suscripciones.length; i++) {
+          final suscripcion = suscripciones[i];
+          print('🟢 [SCREEN] Procesando suscripción ${i + 1}/${suscripciones.length}');
+          print('🟢 [SCREEN] ID: ${suscripcion.id}');
+          print('🟢 [SCREEN] Estado actual: ${suscripcion.estado}');
+          
           await _supabaseService.marcarRecordatorioEnviado(suscripcion.id);
+          
+          print('✅ [SCREEN] Suscripción ${i + 1} marcada exitosamente');
         }
+        
+        print('✅ [SCREEN] Todas las suscripciones fueron marcadas');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -446,9 +479,15 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
               backgroundColor: Colors.green,
             ),
           );
-          _cargarDatos();
+          
+          print('🟢 [SCREEN] Recargando datos...');
+          await _cargarDatos();
+          print('✅ [SCREEN] Datos recargados');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
+        print('❌ [SCREEN ERROR] Error en marcado masivo: $e');
+        print('❌ [SCREEN ERROR] Stack trace: $stackTrace');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -458,6 +497,8 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
           );
         }
       }
+    } else {
+      print('🟡 [SCREEN] Usuario canceló el marcado masivo');
     }
   }
 

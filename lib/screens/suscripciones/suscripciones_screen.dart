@@ -320,54 +320,79 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
   }
 
   Future<void> _eliminarSuscripcion(Suscripcion suscripcion) async {
-    // Intentar obtener cliente, pero no es crítico
-    final nombreCliente =
-        _clientes
-            .where((c) => c.id == suscripcion.clienteId)
-            .map((c) => c.nombreCompleto)
-            .firstOrNull ??
-        'Cliente desconocido';
+  // Obtener información del cliente y plataforma
+  final nombreCliente = _clientes
+      .where((c) => c.id == suscripcion.clienteId)
+      .map((c) => c.nombreCompleto)
+      .firstOrNull ??
+    'Cliente desconocido';
 
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar Suscripción'),
-        content: Text(
-          '¿Estás seguro de eliminar la suscripción de "$nombreCliente"?\n\n'
-          'Esta acción no se puede deshacer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Eliminar'),
-          ),
-        ],
+  final plataforma = _plataformas.firstWhere(
+    (p) => p.id == suscripcion.plataformaId,
+    orElse: () => Plataforma(
+      id: '',
+      nombre: 'Plataforma',
+      icono: '',
+      precioBase: 0,
+      maxPerfiles: 0,
+      color: '#000000',
+      estado: '',
+      fechaCreacion: DateTime.now(),
+    ),
+  );
+
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Cancelar Suscripción'),
+      content: Text(
+        '¿Estás seguro de cancelar la suscripción de "$nombreCliente" para ${plataforma.nombre}?\n\n'
+        'Esta acción:\n'
+        '• Liberará el perfil\n'
+        '• Eliminará las alertas\n'
+        '• Marcará la suscripción como cancelada\n\n'
+        'Esta acción no se puede deshacer.',
       ),
-    );
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('No, mantener'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Sí, cancelar'),
+        ),
+      ],
+    ),
+  );
 
-    if (confirmar == true) {
-      try {
-        await _supabaseService.eliminarSuscripcion(suscripcion.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Suscripción eliminada')),
-          );
-          _cargarDatos();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
-        }
+  if (confirmar == true) {
+    try {
+      // CAMBIO: Usar cancelarSuscripcion en lugar de eliminarSuscripcion
+      await _supabaseService.cancelarSuscripcion(suscripcion.id);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Suscripción cancelada exitosamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _cargarDatos();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cancelar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -609,13 +634,6 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: "fab_suscripciones",
-        onPressed: () => _mostrarDialogoSuscripcion(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva Suscripción'),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -661,6 +679,9 @@ class _SuscripcionCard extends StatelessWidget {
         break;
       case 'cancelada':
         estadoColor = Colors.grey;
+        break;
+      case 'esperando_pago':
+        estadoColor = Colors.orange;
         break;
       default:
         estadoColor = Colors.blue;
@@ -802,87 +823,6 @@ class _SuscripcionCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      if (suscripcion.estado == 'activa')
-                        TextButton.icon(
-                          onPressed: () async {
-                            // Renovar suscripción
-                            final confirmar = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Renovar Suscripción'),
-                                content: Text(
-                                  '¿Renovar la suscripción para el ${DateFormat('dd/MM/yyyy').format(DateTime(suscripcion.fechaProximoPago.year, suscripcion.fechaProximoPago.month + 1, suscripcion.fechaProximoPago.day))}?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text('Cancelar'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    child: const Text('Renovar'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (confirmar == true) {
-                              try {
-                                final nuevaFecha = DateTime(
-                                  suscripcion.fechaProximoPago.year,
-                                  suscripcion.fechaProximoPago.month + 1,
-                                  suscripcion.fechaProximoPago.day,
-                                );
-
-                                final suscripcionActualizada = Suscripcion(
-                                  id: suscripcion.id,
-                                  clienteId: suscripcion.clienteId,
-                                  perfilId: suscripcion.perfilId,
-                                  plataformaId: suscripcion.plataformaId,
-                                  tipoSuscripcion: suscripcion.tipoSuscripcion,
-                                  precio: suscripcion.precio,
-                                  fechaInicio: suscripcion.fechaInicio,
-                                  fechaProximoPago: nuevaFecha,
-                                  fechaLimitePago: nuevaFecha,
-                                  estado: 'activa',
-                                  fechaCreacion: suscripcion.fechaCreacion,
-                                  notas: suscripcion.notas,
-                                );
-
-                                await SupabaseService().actualizarSuscripcion(
-                                  suscripcionActualizada,
-                                );
-
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Suscripción renovada'),
-                                    ),
-                                  );
-                                  // Forzar recarga de la lista
-                                  (context
-                                          .findAncestorStateOfType<
-                                            _SuscripcionesScreenState
-                                          >())
-                                      ?._cargarDatos();
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Error: $e')),
-                                  );
-                                }
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Renovar'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.blue,
-                          ),
-                        ),
                       TextButton.icon(
                         onPressed: onEdit,
                         icon: const Icon(Icons.edit, size: 18),

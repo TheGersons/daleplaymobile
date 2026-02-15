@@ -5,6 +5,7 @@ import '../../models/cliente.dart';
 import '../../models/plataforma.dart';
 import '../../models/cuenta_correo.dart';
 import '../../models/perfil.dart';
+import '../../models/suscripcion.dart';
 import '../../services/supabase_service.dart';
 import 'crear_cliente_mini_dialog.dart';
 import 'crear_cuenta_mini_dialog.dart';
@@ -27,6 +28,7 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
   List<Plataforma> _plataformas = [];
   List<CuentaCorreo> _cuentas = [];
   List<Perfil> _perfiles = [];
+  List<Suscripcion> _suscripciones = [];
 
   // Listas filtradas
   List<CuentaCorreo> _cuentasFiltradas = [];
@@ -59,12 +61,14 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
       final plataformas = await _supabaseService.obtenerPlataformas();
       final cuentas = await _supabaseService.obtenerCuentas();
       final perfiles = await _supabaseService.obtenerPerfiles();
+      final suscripciones = await _supabaseService.obtenerSuscripciones();
 
       setState(() {
         _clientes = clientes.where((c) => c.estado == 'activo').toList();
         _plataformas = plataformas.where((p) => p.estado == 'activa').toList();
         _cuentas = cuentas.where((c) => c.estado == 'activo').toList();
         _perfiles = perfiles;
+        _suscripciones = suscripciones;
       });
     } catch (e) {
       if (mounted) {
@@ -75,6 +79,12 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  bool _perfilEstaDisponible(Perfil perfil) {
+    return !_suscripciones.any(
+      (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+    );
   }
 
   void _onClienteChanged(Cliente? cliente) {
@@ -119,7 +129,11 @@ class _SuscripcionRapidaDialogState extends State<SuscripcionRapidaDialog> {
 
       if (cuenta != null) {
         _perfilesFiltrados = _perfiles
-            .where((p) => p.cuentaId == cuenta.id && p.estado == 'disponible')
+            .where(
+              (p) =>
+                  p.cuentaId == cuenta.id &&
+                  _perfilEstaDisponible(p), // ← CAMBIO AQUÍ
+            )
             .toList();
       } else {
         _perfilesFiltrados = [];

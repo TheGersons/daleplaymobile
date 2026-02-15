@@ -98,9 +98,7 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       //espacio para que no este pegada la primera card al appbar
-      appBar: AppBar(
-        title: const Text('Mis Plataformas'),
-      ),
+      appBar: AppBar(title: const Text('Mis Plataformas')),
       body: Container(
         padding: const EdgeInsets.only(top: 20),
         child: _isLoading
@@ -288,21 +286,21 @@ class _PlataformasScreenState extends State<PlataformasScreen> {
       'Max':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/HBO_Max_Logo.svg/330px-HBO_Max_Logo.svg.png',
       'Prime Video':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Prime_Video_logo_%282024%29.svg/640px-Prime_Video_logo_%282024%29.svg.png',
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Prime_Video.png/320px-Prime_Video.png',
       'Spotify':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/168px-Spotify_logo_without_text.svg.png',
       'YouTube Premium':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/YouTube_social_white_circle_%282017%29.svg/640px-YouTube_social_white_circle_%282017%29.svg.png',
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/240px-YouTube_full-color_icon_%282017%29.svg.png',
       'Paramount+':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Paramount_Plus.svg/330px-Paramount_Plus.svg.png',
       'Apple TV+':
           'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Apple_TV_Plus_Logo.svg/330px-Apple_TV_Plus_Logo.svg.png',
       'Vix':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/1280px-ViX_Logo.png?20220404085413',
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/ViX_Logo.png/320px-ViX_Logo.png',
       'Viki':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/640px-Rakuten_Viki_logo.svg.png',
+          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Rakuten_Viki_logo.svg/320px-Rakuten_Viki_logo.svg.png',
       'Crunchyroll':
-          'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Crunchyroll_logo_2018_vertical.png/640px-Crunchyroll_logo_2018_vertical.png',
+          'https://upload.wikimedia.org/wikipedia/en/thumb/9/99/Crunchyroll_logo.svg/320px-Crunchyroll_logo.svg.png',
     };
 
     final logoUrl = logos[plataforma.nombre];

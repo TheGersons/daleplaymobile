@@ -784,6 +784,8 @@ class SupabaseService {
   /// Incluye: activas + esperando_pago sin recordatorio hoy
   Future<List<Suscripcion>> obtenerSuscripcionesParaRecordatorio() async {
     try {
+      print('🔵 [DEBUG] Obteniendo suscripciones para recordatorio...');
+
       final hoy = DateTime.now();
       final manana = hoy.add(const Duration(days: 1));
 
@@ -791,18 +793,33 @@ class SupabaseService {
       final hoyStr = hoy.toIso8601String().split('T')[0];
       final mananaStr = manana.toIso8601String().split('T')[0];
 
+      print('🔵 [DEBUG] Fecha hoy: $hoyStr');
+      print('🔵 [DEBUG] Fecha mañana: $mananaStr');
+
       // Obtener suscripciones activas que vencen hoy o mañana
       final response = await _client
           .from('suscripciones')
           .select()
           .filter('deleted_at', 'is', null)
-          .or('estado.eq.activa,estado.eq.esperando_pago')
-          .or('fecha_proximo_pago.eq.$hoyStr,fecha_proximo_pago.eq.$mananaStr')
+          .inFilter('estado', ['activa', 'esperando_pago'])
+          .inFilter('fecha_proximo_pago', [hoyStr, mananaStr])
           .order('fecha_proximo_pago');
+
+      print(
+        '🔵 [DEBUG] Suscripciones encontradas en BD: ${(response as List).length}',
+      );
 
       final suscripciones = (response as List)
           .map((json) => Suscripcion.fromJson(json))
           .toList();
+
+      // Mostrar todas las suscripciones encontradas
+      for (var i = 0; i < suscripciones.length; i++) {
+        final s = suscripciones[i];
+        print(
+          '🔵 [DEBUG] Suscripción $i: cliente=${s.clienteId}, fecha=${s.fechaProximoPago}, estado=${s.estado}',
+        );
+      }
 
       // Filtrar las que ya tienen recordatorio enviado hoy
       final suscripcionesFiltradas = <Suscripcion>[];
@@ -811,13 +828,22 @@ class SupabaseService {
         final tieneRecordatorioHoy = await _tieneRecordatorioHoy(
           suscripcion.id,
         );
+        print(
+          '🔵 [DEBUG] Suscripción ${suscripcion.id} tiene recordatorio hoy: $tieneRecordatorioHoy',
+        );
+
         if (!tieneRecordatorioHoy) {
           suscripcionesFiltradas.add(suscripcion);
         }
       }
 
+      print(
+        '✅ [DEBUG] Total de suscripciones filtradas: ${suscripcionesFiltradas.length}',
+      );
+
       return suscripcionesFiltradas;
     } catch (e) {
+      print('❌ [ERROR] En obtenerSuscripcionesParaRecordatorio: $e');
       throw Exception('Error al obtener suscripciones para recordatorio: $e');
     }
   }
@@ -844,10 +870,17 @@ class SupabaseService {
   /// Marcar recordatorio como enviado y cambiar estado a esperando_pago
   Future<void> marcarRecordatorioEnviado(String suscripcionId) async {
     try {
+      print(
+        '🔵 [DEBUG] Iniciando marcarRecordatorioEnviado para: $suscripcionId',
+      );
+
       final hoy = DateTime.now();
       final hoyStr = hoy.toIso8601String().split('T')[0];
 
+      print('🔵 [DEBUG] Fecha hoy: $hoyStr');
+
       // 1. Crear o actualizar recordatorio
+      print('🔵 [DEBUG] Buscando recordatorio existente...');
       final recordatorioExistente = await _client
           .from('recordatorios_pago')
           .select()
@@ -855,28 +888,43 @@ class SupabaseService {
           .eq('fecha_recordatorio', hoyStr)
           .maybeSingle();
 
+      print(
+        '🔵 [DEBUG] Recordatorio existente: ${recordatorioExistente != null ? "SÍ" : "NO"}',
+      );
+
       if (recordatorioExistente != null) {
         // Actualizar existente
+        print('🔵 [DEBUG] Actualizando recordatorio existente...');
         await _client
             .from('recordatorios_pago')
             .update({'enviado': true, 'fecha_envio': hoy.toIso8601String()})
             .eq('id', recordatorioExistente['id']);
+        print('✅ [DEBUG] Recordatorio actualizado');
       } else {
         // Crear nuevo
+        print('🔵 [DEBUG] Creando nuevo recordatorio...');
         await _client.from('recordatorios_pago').insert({
           'suscripcion_id': suscripcionId,
           'fecha_recordatorio': hoyStr,
           'enviado': true,
           'fecha_envio': hoy.toIso8601String(),
         });
+        print('✅ [DEBUG] Recordatorio creado');
       }
 
       // 2. Cambiar estado de suscripción a esperando_pago
+      print('🔵 [DEBUG] Cambiando estado de suscripción a esperando_pago...');
+      print('🔵 [DEBUG] Suscripción ID: $suscripcionId');
+
       await _client
           .from('suscripciones')
           .update({'estado': 'esperando_pago'})
           .eq('id', suscripcionId);
-    } catch (e) {
+
+      print('✅ [DEBUG] Estado cambiado exitosamente');
+    } catch (e, stackTrace) {
+      print('❌ [ERROR] En marcarRecordatorioEnviado: $e');
+      print('❌ [ERROR] Stack trace: $stackTrace');
       throw Exception('Error al marcar recordatorio: $e');
     }
   }

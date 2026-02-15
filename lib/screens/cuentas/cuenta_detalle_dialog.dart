@@ -27,6 +27,13 @@ class CuentaDetalleDialog extends StatelessWidget {
     this.onEditar,
   });
 
+  // Calcular si un perfil está realmente disponible
+  bool _perfilEstaDisponible(Perfil perfil) {
+    return !suscripciones.any(
+      (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorPlataforma = Color(
@@ -43,10 +50,7 @@ class CuentaDetalleDialog extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    colorPlataforma,
-                    colorPlataforma.withOpacity(0.7),
-                  ],
+                  colors: [colorPlataforma, colorPlataforma.withOpacity(0.7)],
                 ),
               ),
               child: Row(
@@ -109,7 +113,7 @@ class CuentaDetalleDialog extends StatelessWidget {
                   children: [
                     // Información de la cuenta
                     _buildSeccionCredenciales(context),
-                    
+
                     const SizedBox(height: 24),
                     const Divider(),
                     const SizedBox(height: 24),
@@ -209,8 +213,14 @@ class CuentaDetalleDialog extends StatelessWidget {
   }
 
   Widget _buildEstadisticasPerfiles() {
-    final perfilesDisponibles = perfiles.where((p) => p.estado == 'disponible').length;
-    final perfilesOcupados = perfiles.where((p) => p.estado == 'ocupado').length;
+    final perfilesDeCuenta = perfiles.where((p) => p.cuentaId == cuenta.id);
+
+    final perfilesDisponibles = perfilesDeCuenta
+        .where((p) => _perfilEstaDisponible(p))
+        .length;
+    final perfilesOcupados = perfilesDeCuenta
+        .where((p) => !_perfilEstaDisponible(p))
+        .length;
 
     return Row(
       children: [
@@ -244,7 +254,12 @@ class CuentaDetalleDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildEstadisticaCard(String label, String value, IconData icon, Color color) {
+  Widget _buildEstadisticaCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -264,13 +279,7 @@ class CuentaDetalleDialog extends StatelessWidget {
               color: color,
             ),
           ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.white,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.white)),
         ],
       ),
     );
@@ -283,7 +292,11 @@ class CuentaDetalleDialog extends StatelessWidget {
           padding: const EdgeInsets.all(32),
           child: Column(
             children: [
-              Icon(Icons.account_circle_outlined, size: 64, color: Colors.grey[400]),
+              Icon(
+                Icons.account_circle_outlined,
+                size: 64,
+                color: Colors.grey[400],
+              ),
               const SizedBox(height: 16),
               Text(
                 'No hay perfiles en esta cuenta',
@@ -328,7 +341,9 @@ class CuentaDetalleDialog extends StatelessWidget {
     );
 
     Cliente? cliente;
-    if (perfil.estado == 'ocupado' && suscripcion.id.isNotEmpty) {
+    final esDisponible = _perfilEstaDisponible(perfil);
+
+    if (!esDisponible && suscripcion.id.isNotEmpty) {
       cliente = clientes.firstWhere(
         (c) => c.id == suscripcion.clienteId,
         orElse: () => Cliente(
@@ -341,7 +356,6 @@ class CuentaDetalleDialog extends StatelessWidget {
       );
     }
 
-    final esDisponible = perfil.estado == 'disponible';
     final colorEstado = esDisponible ? Colors.green : Colors.orange;
 
     return Card(
@@ -383,12 +397,13 @@ class CuentaDetalleDialog extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white
+                                  color: Colors.white,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (perfil.pin != null && perfil.pin!.isNotEmpty) ...[
+                            if (perfil.pin != null &&
+                                perfil.pin!.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               _buildPinChip(perfil.pin!, context),
                             ],
@@ -396,7 +411,10 @@ class CuentaDetalleDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: colorEstado.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
@@ -418,11 +436,18 @@ class CuentaDetalleDialog extends StatelessWidget {
               ),
 
               // Información del cliente (solo si está ocupado)
-              if (!esDisponible && cliente != null && cliente.id.isNotEmpty) ...[
+              if (!esDisponible &&
+                  cliente != null &&
+                  cliente.id.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 12),
-                _buildInfoRow('Cliente', cliente.nombreCompleto, Icons.person, context),
+                _buildInfoRow(
+                  'Cliente',
+                  cliente.nombreCompleto,
+                  Icons.person,
+                  context,
+                ),
                 const SizedBox(height: 8),
                 _buildInfoRowWithCopy(
                   'Teléfono',
@@ -494,15 +519,17 @@ class CuentaDetalleDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon, BuildContext context) {
+  Widget _buildInfoRow(
+    String label,
+    String value,
+    IconData icon,
+    BuildContext context,
+  ) {
     return Row(
       children: [
         Icon(icon, size: 16, color: Colors.grey[600]),
         const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(fontSize: 13, color: Colors.white),
-        ),
+        Text('$label: ', style: TextStyle(fontSize: 13, color: Colors.white)),
         Expanded(
           child: Text(
             value,
@@ -527,10 +554,7 @@ class CuentaDetalleDialog extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: Colors.grey[600]),
         const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(fontSize: 13, color: Colors.white),
-        ),
+        Text('$label: ', style: TextStyle(fontSize: 13, color: Colors.white)),
         Expanded(
           child: Text(
             value,
@@ -756,7 +780,9 @@ class _CredencialesSectionState extends State<_CredencialesSection> {
               ),
               IconButton(
                 style: ButtonStyle(
-                  foregroundColor: WidgetStateProperty.all<Color>(Colors.orange),
+                  foregroundColor: WidgetStateProperty.all<Color>(
+                    Colors.orange,
+                  ),
                 ),
                 icon: Icon(
                   _mostrarPassword ? Icons.visibility_off : Icons.visibility,
@@ -769,7 +795,9 @@ class _CredencialesSectionState extends State<_CredencialesSection> {
               IconButton(
                 icon: const Icon(Icons.copy, size: 18),
                 style: ButtonStyle(
-                  foregroundColor: WidgetStateProperty.all<Color>(Colors.orange),
+                  foregroundColor: WidgetStateProperty.all<Color>(
+                    Colors.orange,
+                  ),
                 ),
                 onPressed: () => _copiar(widget.cuenta.password, 'Contraseña'),
                 tooltip: 'Copiar',

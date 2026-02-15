@@ -76,7 +76,6 @@ class _RenovarSuscripcionDialogState extends State<RenovarSuscripcionDialog> {
       initialDate: _fechaProximoPago,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      locale: const Locale('es', 'ES'),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -251,8 +250,7 @@ class _RenovarSuscripcionDialogState extends State<RenovarSuscripcionDialog> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      DateFormat('EEEE, dd MMMM yyyy', 'es_ES')
-                                          .format(_fechaProximoPago),
+                                      DateFormat('dd/MM/yyyy').format(_fechaProximoPago),
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,

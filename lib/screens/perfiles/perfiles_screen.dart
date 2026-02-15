@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-
+import 'perfil_detalle_dialog.dart';
 // Modelos
 import '../../models/perfil.dart';
 import '../../models/cuenta_correo.dart';
@@ -132,14 +132,21 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
 
     // 2. Estado
     if (_filtroEstado != 'todos') {
-      lista = lista.where((p) => p.estado == _filtroEstado).toList();
+      lista = lista.where((p) {
+        final estadoReal = _calcularEstadoReal(p);
+        return estadoReal == _filtroEstado;
+      }).toList();
     }
 
     // 3. Ordenamiento
+    // 3. Ordenamiento - USAR ESTADO CALCULADO
     lista.sort((a, b) {
-      // Disponibles siempre arriba
-      if (a.estado == 'disponible' && b.estado != 'disponible') return -1;
-      if (a.estado != 'disponible' && b.estado == 'disponible') return 1;
+      // Disponibles siempre arriba (usando estado calculado)
+      final estadoRealA = _calcularEstadoReal(a);
+      final estadoRealB = _calcularEstadoReal(b);
+
+      if (estadoRealA == 'disponible' && estadoRealB != 'disponible') return -1;
+      if (estadoRealA != 'disponible' && estadoRealB == 'disponible') return 1;
 
       // Desempate con criterio seleccionado
       int result = 0;
@@ -148,7 +155,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
           result = a.nombrePerfil.compareTo(b.nombrePerfil);
           break;
         case 'estado':
-          result = a.estado.compareTo(b.estado);
+          result = estadoRealA.compareTo(estadoRealB);
           break;
         case 'plataforma':
         default:
@@ -255,7 +262,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
         perfil: perfil,
         cuentas: _cuentas,
         plataformas: _plataformas,
-        suscripciones: _suscripciones, // <--- AGREGAR ESTO
+        suscripciones: _suscripciones, // <--- IMPORTANTE
         onGuardar: () {
           Navigator.pop(ctx);
           _cargarDatos();
@@ -412,7 +419,54 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     );
   }
 
+  void _mostrarDetallePerfil(Perfil perfil) {
+    // Calcular estado real
+    final estadoReal = _calcularEstadoReal(perfil);
+
+    // Obtener datos relacionados
+    final cuenta = _cuentas.firstWhere((c) => c.id == perfil.cuentaId);
+    final plataforma = _plataformas.firstWhere(
+      (p) => p.id == cuenta.plataformaId,
+    );
+
+    // Buscar si tiene suscripción activa
+    Suscripcion? suscripcion;
+    Cliente? cliente;
+
+    try {
+      suscripcion = _suscripciones.firstWhere(
+        (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+      );
+      cliente = _clientes.firstWhere((c) => c.id == suscripcion!.clienteId);
+    } catch (_) {
+      // No tiene suscripción o cliente
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => PerfilDetalleDialog(
+        perfil: perfil,
+        cuenta: cuenta,
+        plataforma: plataforma,
+        suscripcion: suscripcion,
+        cliente: cliente,
+        estadoReal: estadoReal, // PASAR EL ESTADO CALCULADO
+        onEdit: () => _abrirDialogo(perfil: perfil),
+      ),
+    );
+  }
+
+  // Calcular el estado REAL del perfil basándose en suscripciones
+  String _calcularEstadoReal(Perfil perfil) {
+    final tieneSuscripcionActiva = _suscripciones.any(
+      (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+    );
+
+    return tieneSuscripcionActiva ? 'ocupado' : 'disponible';
+  }
+
   Widget _buildPerfilCard(Perfil perfil) {
+    final estadoReal = _calcularEstadoReal(perfil);
     // Relaciones
     final cuenta = _cuentas.firstWhere(
       (c) => c.id == perfil.cuentaId,
@@ -454,213 +508,216 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     } catch (_) {}
 
     final colorPlataforma = _parseColor(plataforma.color);
-    final isOccupied = perfil.estado == 'ocupado';
+    final isOccupied = estadoReal == 'ocupado';
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorPlataforma.withOpacity(0.5), width: 1),
-      ),
-      child: Column(
-        children: [
-          // HEADER CARD
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: colorPlataforma.withOpacity(0.1),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
+    return InkWell(
+      onTap: () => _mostrarDetallePerfil(perfil),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: colorPlataforma.withOpacity(0.5), width: 1),
+        ),
+        child: Column(
+          children: [
+            // HEADER CARD
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorPlataforma.withOpacity(0.1),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  _buildLogo(plataforma, 24),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          plataforma.nombre,
+                          style: TextStyle(
+                            color: colorPlataforma,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          cuenta.email,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isOccupied
+                          ? Colors.orange.withOpacity(0.2)
+                          : Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isOccupied ? Colors.orange : Colors.green,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      estadoReal == 'disponible' ? 'Disponible' : 'Ocupado',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: estadoReal == 'disponible'
+                            ? Colors.green
+                            : Colors.orange,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                _buildLogo(plataforma, 24),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        plataforma.nombre,
-                        style: TextStyle(
-                          color: colorPlataforma,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+
+            // BODY CARD
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.grey[200],
+                    child: Text(
+                      perfil.nombrePerfil.isNotEmpty
+                          ? perfil.nombrePerfil[0].toUpperCase()
+                          : '#',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
-                      Text(
-                        cuenta.email,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isOccupied
-                        ? Colors.orange.withOpacity(0.2)
-                        : Colors.green.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isOccupied ? Colors.orange : Colors.green,
-                      width: 1,
                     ),
                   ),
-                  child: Text(
-                    isOccupied ? 'OCUPADO' : 'DISPONIBLE',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isOccupied
-                          ? Colors.orange[800]
-                          : Colors.green[800],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                  const SizedBox(width: 12),
 
-          // BODY CARD
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.grey[200],
-                  child: Text(
-                    perfil.nombrePerfil.isNotEmpty
-                        ? perfil.nombrePerfil[0].toUpperCase()
-                        : '#',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        perfil.nombrePerfil,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          perfil.nombrePerfil,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.lock_outline,
-                            size: 14,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'PIN: ${perfil.pin}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontFamily: 'Monospace',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: () {
-                              Clipboard.setData(
-                                ClipboardData(text: perfil.pin ?? ''),
-                              );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('PIN Copiado'),
-                                  duration: Duration(milliseconds: 500),
-                                ),
-                              );
-                            },
-                            child: const Icon(
-                              Icons.copy,
-                              size: 14,
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      if (isOccupied && clienteAsignado != null) ...[
-                        const SizedBox(height: 8),
-                        const Divider(height: 12),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(
-                              Icons.person,
+                            Icon(
+                              Icons.lock_outline,
                               size: 14,
-                              color: Colors.grey,
+                              color: Colors.grey[600],
                             ),
                             const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '${clienteAsignado.nombreCompleto} • ${clienteAsignado.telefono}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              'PIN: ${perfil.pin}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontFamily: 'Monospace',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () {
+                                Clipboard.setData(
+                                  ClipboardData(text: perfil.pin ?? ''),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('PIN Copiado'),
+                                    duration: Duration(milliseconds: 500),
+                                  ),
+                                );
+                              },
+                              child: const Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Colors.blue,
                               ),
                             ),
                           ],
                         ),
-                        if (suscripcionActiva != null)
-                          Text(
-                            'Vence: ${DateFormat('dd/MM/yyyy').format(suscripcionActiva.fechaProximoPago)}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _getColorFecha(
-                                suscripcionActiva.fechaProximoPago,
+
+                        if (isOccupied && clienteAsignado != null) ...[
+                          const SizedBox(height: 8),
+                          const Divider(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.person,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '${clienteAsignado.nombreCompleto} • ${clienteAsignado.telefono}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (suscripcionActiva != null)
+                            Text(
+                              'Vence: ${DateFormat('dd/MM/yyyy').format(suscripcionActiva.fechaProximoPago)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _getColorFecha(
+                                  suscripcionActiva.fechaProximoPago,
+                                ),
                               ),
                             ),
-                          ),
+                        ],
                       ],
+                    ),
+                  ),
+
+                  Column(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 20),
+                        onPressed: () => _abrirDialogo(perfil: perfil),
+                        tooltip: 'Editar',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete,
+                          size: 20,
+                          color: Colors.red,
+                        ),
+                        onPressed: () => _eliminarPerfil(perfil),
+                        tooltip: 'Eliminar',
+                      ),
                     ],
                   ),
-                ),
-
-                Column(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit, size: 20),
-                      onPressed: () => _abrirDialogo(perfil: perfil),
-                      tooltip: 'Editar',
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.delete,
-                        size: 20,
-                        color: Colors.red,
-                      ),
-                      onPressed: () => _eliminarPerfil(perfil),
-                      tooltip: 'Eliminar',
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -815,6 +872,26 @@ class _PerfilDialogState extends State<PerfilDialog> {
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
+    if (_estadoSeleccionado == 'disponible' && widget.perfil != null) {
+      final tieneSuscripcion = widget.suscripciones.any(
+        (s) => s.perfilId == widget.perfil!.id && s.estado != 'cancelada',
+      );
+
+      if (tieneSuscripcion) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se puede cambiar a disponible: El perfil tiene una suscripción activa',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return; // Detener el guardado
+      }
+    }
 
     try {
       final nuevoPerfil = Perfil(

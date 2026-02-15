@@ -25,7 +25,7 @@ class _CuentasScreenState extends State<CuentasScreen> {
   List<Plataforma> _plataformas = [];
   List<Perfil> _perfiles = [];
   List<Cliente> _clientes = [];
-List<Suscripcion> _suscripciones = [];
+  List<Suscripcion> _suscripciones = [];
   bool _isLoading = true;
 
   // Filtros básicos
@@ -51,24 +51,24 @@ List<Suscripcion> _suscripciones = [];
   }
 
   Future<void> _cargarDatos() async {
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    final cuentas = await _supabaseService.obtenerCuentas();
-    final plataformas = await _supabaseService.obtenerPlataformas();
-    final perfiles = await _supabaseService.obtenerPerfiles();
-    final clientes = await _supabaseService.obtenerClientes();
-    final suscripciones = await _supabaseService.obtenerSuscripciones();
+    try {
+      final cuentas = await _supabaseService.obtenerCuentas();
+      final plataformas = await _supabaseService.obtenerPlataformas();
+      final perfiles = await _supabaseService.obtenerPerfiles();
+      final clientes = await _supabaseService.obtenerClientes();
+      final suscripciones = await _supabaseService.obtenerSuscripciones();
 
-    setState(() {
-      _cuentas = cuentas;
-      _plataformas = plataformas;
-      _perfiles = perfiles;
-      _clientes = clientes;
-      _suscripciones = suscripciones;
-      _aplicarFiltros();
-    });
-  } catch (e) {
+      setState(() {
+        _cuentas = cuentas;
+        _plataformas = plataformas;
+        _perfiles = perfiles;
+        _clientes = clientes;
+        _suscripciones = suscripciones;
+        _aplicarFiltros();
+      });
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -77,6 +77,12 @@ List<Suscripcion> _suscripciones = [];
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  bool _perfilEstaDisponible(Perfil perfil) {
+    return !_suscripciones.any(
+      (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+    );
   }
 
   void _aplicarFiltros() {
@@ -122,13 +128,13 @@ List<Suscripcion> _suscripciones = [];
           comparison = a.email.compareTo(b.email);
           break;
         case 'perfiles_disponibles':
-          final perfilesA = _perfiles
-              .where((p) => p.cuentaId == a.id && p.estado == 'disponible')
+          final disponiblesA = _perfiles
+              .where((p) => p.cuentaId == a.id && _perfilEstaDisponible(p))
               .length;
-          final perfilesB = _perfiles
-              .where((p) => p.cuentaId == b.id && p.estado == 'disponible')
+          final disponiblesB = _perfiles
+              .where((p) => p.cuentaId == b.id && _perfilEstaDisponible(p))
               .length;
-          comparison = perfilesA.compareTo(perfilesB);
+          comparison = disponiblesA.compareTo(disponiblesB);
           break;
         case 'perfiles_totales':
           final perfilesA = _perfiles.where((p) => p.cuentaId == a.id).length;
@@ -188,24 +194,22 @@ List<Suscripcion> _suscripciones = [];
     );
   }
 
- 
-
   void _mostrarDetalleCuenta(CuentaCorreo cuenta) {
-  showDialog(
-    context: context,
-    builder: (context) => CuentaDetalleDialog(
-      cuenta: cuenta,
-      plataforma: _plataformas.firstWhere((p) => p.id == cuenta.plataformaId),
-      perfiles: _perfiles.where((p) => p.cuentaId == cuenta.id).toList(),
-      clientes: _clientes,
-      suscripciones: _suscripciones,
-      onEditar: () {
-        Navigator.pop(context);
-        _mostrarDialogoCuenta(cuenta);
-      },
-    ),
-  );
-}
+    showDialog(
+      context: context,
+      builder: (context) => CuentaDetalleDialog(
+        cuenta: cuenta,
+        plataforma: _plataformas.firstWhere((p) => p.id == cuenta.plataformaId),
+        perfiles: _perfiles.where((p) => p.cuentaId == cuenta.id).toList(),
+        clientes: _clientes,
+        suscripciones: _suscripciones,
+        onEditar: () {
+          Navigator.pop(context);
+          _mostrarDialogoCuenta(cuenta);
+        },
+      ),
+    );
+  }
 
   Future<void> _eliminarCuenta(CuentaCorreo cuenta) async {
     // Verificar si tiene perfiles
@@ -493,23 +497,33 @@ List<Suscripcion> _suscripciones = [];
     Plataforma plataforma,
     List<Perfil> perfiles,
   ) {
-    final perfilesDisponibles = perfiles
-        .where((p) => p.estado == 'disponible')
-        .length;
-    final perfilesOcupados = perfiles
-        .where((p) => p.estado == 'ocupado')
+    final disponibles = perfiles
+        .where(
+          (p) =>
+              p.cuentaId == cuenta.id && _perfilEstaDisponible(p), // ← CAMBIO
+        )
         .length;
 
+    final ocupados = perfiles
+        .where(
+          (p) =>
+              p.cuentaId == cuenta.id && !_perfilEstaDisponible(p), // ← CAMBIO
+        )
+        .length;
+
+    final perfilesDisponibles = disponibles;
+    final perfilesOcupados = ocupados;
+
     return _CuentaCard(
-  cuenta: cuenta,
-  plataforma: plataforma,
-  perfilesDisponibles: perfilesDisponibles,
-  perfilesOcupados: perfilesOcupados,
-  perfilesTotal: perfiles.length,
-  onTap: () => _mostrarDetalleCuenta(cuenta),
-  onEdit: () => _mostrarDialogoCuenta(cuenta),
-  onDelete: () => _eliminarCuenta(cuenta),
-);
+      cuenta: cuenta,
+      plataforma: plataforma,
+      perfilesDisponibles: perfilesDisponibles,
+      perfilesOcupados: perfilesOcupados,
+      perfilesTotal: perfiles.length,
+      onTap: () => _mostrarDetalleCuenta(cuenta),
+      onEdit: () => _mostrarDialogoCuenta(cuenta),
+      onDelete: () => _eliminarCuenta(cuenta),
+    );
   }
 }
 
@@ -583,7 +597,10 @@ class _CuentaCardState extends State<_CuentaCard> {
                           DateFormat(
                             'dd/MM/yyyy',
                           ).format(widget.cuenta.fechaCreacion),
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
@@ -618,7 +635,7 @@ class _CuentaCardState extends State<_CuentaCard> {
                 ],
               ),
             ),
-        
+
             // Contenido
             Padding(
               padding: const EdgeInsets.all(16),
@@ -677,8 +694,9 @@ class _CuentaCardState extends State<_CuentaCard> {
                               : Icons.visibility,
                           size: 18,
                         ),
-                        onPressed: () =>
-                            setState(() => _mostrarPassword = !_mostrarPassword),
+                        onPressed: () => setState(
+                          () => _mostrarPassword = !_mostrarPassword,
+                        ),
                         tooltip: _mostrarPassword ? 'Ocultar' : 'Mostrar',
                       ),
                       IconButton(
@@ -764,7 +782,9 @@ class _CuentaCardState extends State<_CuentaCard> {
                         onPressed: widget.onDelete,
                         icon: const Icon(Icons.delete, size: 18),
                         label: const Text('Eliminar'),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
                       ),
                     ],
                   ),
