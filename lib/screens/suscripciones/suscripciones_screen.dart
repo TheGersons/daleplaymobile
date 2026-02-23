@@ -1,3 +1,4 @@
+import 'package:daleplay/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -159,9 +160,8 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
 
     // Filtro próximos a vencer
     if (_proximosAVencer == true) {
-      final hoy = DateTime.now();
       filtradas = filtradas.where((s) {
-        final diasRestantes = s.fechaProximoPago.difference(hoy).inDays;
+        final diasRestantes = FechaUtils.diasRestantes(s.fechaProximoPago);
         return diasRestantes >= 0 && diasRestantes <= 7 && s.estado == 'activa';
       }).toList();
     }
@@ -320,79 +320,80 @@ class _SuscripcionesScreenState extends State<SuscripcionesScreen> {
   }
 
   Future<void> _eliminarSuscripcion(Suscripcion suscripcion) async {
-  // Obtener información del cliente y plataforma
-  final nombreCliente = _clientes
-      .where((c) => c.id == suscripcion.clienteId)
-      .map((c) => c.nombreCompleto)
-      .firstOrNull ??
-    'Cliente desconocido';
+    // Obtener información del cliente y plataforma
+    final nombreCliente =
+        _clientes
+            .where((c) => c.id == suscripcion.clienteId)
+            .map((c) => c.nombreCompleto)
+            .firstOrNull ??
+        'Cliente desconocido';
 
-  final plataforma = _plataformas.firstWhere(
-    (p) => p.id == suscripcion.plataformaId,
-    orElse: () => Plataforma(
-      id: '',
-      nombre: 'Plataforma',
-      icono: '',
-      precioBase: 0,
-      maxPerfiles: 0,
-      color: '#000000',
-      estado: '',
-      fechaCreacion: DateTime.now(),
-    ),
-  );
-
-  final confirmar = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Cancelar Suscripción'),
-      content: Text(
-        '¿Estás seguro de cancelar la suscripción de "$nombreCliente" para ${plataforma.nombre}?\n\n'
-        'Esta acción:\n'
-        '• Liberará el perfil\n'
-        '• Eliminará las alertas\n'
-        '• Marcará la suscripción como cancelada\n\n'
-        'Esta acción no se puede deshacer.',
+    final plataforma = _plataformas.firstWhere(
+      (p) => p.id == suscripcion.plataformaId,
+      orElse: () => Plataforma(
+        id: '',
+        nombre: 'Plataforma',
+        icono: '',
+        precioBase: 0,
+        maxPerfiles: 0,
+        color: '#000000',
+        estado: '',
+        fechaCreacion: DateTime.now(),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('No, mantener'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          child: const Text('Sí, cancelar'),
-        ),
-      ],
-    ),
-  );
+    );
 
-  if (confirmar == true) {
-    try {
-      // CAMBIO: Usar cancelarSuscripcion en lugar de eliminarSuscripcion
-      await _supabaseService.cancelarSuscripcion(suscripcion.id);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Suscripción cancelada exitosamente'),
-            backgroundColor: Colors.green,
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancelar Suscripción'),
+        content: Text(
+          '¿Estás seguro de cancelar la suscripción de "$nombreCliente" para ${plataforma.nombre}?\n\n'
+          'Esta acción:\n'
+          '• Liberará el perfil\n'
+          '• Eliminará las alertas\n'
+          '• Marcará la suscripción como cancelada\n\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, mantener'),
           ),
-        );
-        _cargarDatos();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cancelar: $e'),
-            backgroundColor: Colors.red,
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sí, cancelar'),
           ),
-        );
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      try {
+        // CAMBIO: Usar cancelarSuscripcion en lugar de eliminarSuscripcion
+        await _supabaseService.cancelarSuscripcion(suscripcion.id);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Suscripción cancelada exitosamente'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _cargarDatos();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al cancelar: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -661,9 +662,9 @@ class _SuscripcionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final diasRestantes = suscripcion.fechaProximoPago
-        .difference(DateTime.now())
-        .inDays;
+    final diasRestantes = FechaUtils.diasRestantes(
+      suscripcion.fechaProximoPago,
+    );
 
     Color estadoColor;
     Color diasColor;
@@ -1867,9 +1868,9 @@ class SuscripcionDetalleDialog extends StatelessWidget {
   }
 
   Widget _buildSeccionPagos(BuildContext context) {
-    final diasRestantes = suscripcion.fechaProximoPago
-        .difference(DateTime.now())
-        .inDays;
+    final diasRestantes = FechaUtils.diasRestantes(
+      suscripcion.fechaProximoPago,
+    );
     final diasServicio = DateTime.now()
         .difference(suscripcion.fechaInicio)
         .inDays;

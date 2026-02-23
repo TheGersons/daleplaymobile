@@ -1,3 +1,4 @@
+import 'package:daleplay/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -47,10 +48,7 @@ class ClienteDetalleDialog extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    colorEstado,
-                    colorEstado.withOpacity(0.7),
-                  ],
+                  colors: [colorEstado, colorEstado.withOpacity(0.7)],
                 ),
               ),
               child: Row(
@@ -185,8 +183,12 @@ class ClienteDetalleDialog extends StatelessWidget {
   }
 
   Widget _buildEstadisticas(List<Suscripcion> suscripcionesCliente) {
-    final activas = suscripcionesCliente.where((s) => s.estado == 'activa').length;
-    final vencidas = suscripcionesCliente.where((s) => s.estado == 'vencida').length;
+    final activas = suscripcionesCliente
+        .where((s) => s.estado == 'activa')
+        .length;
+    final vencidas = suscripcionesCliente
+        .where((s) => s.estado == 'vencida')
+        .length;
     final totalMensual = suscripcionesCliente
         .where((s) => s.estado == 'activa')
         .fold(0.0, (sum, s) => sum + s.precio);
@@ -196,7 +198,11 @@ class ClienteDetalleDialog extends StatelessWidget {
       children: [
         const Text(
           'Resumen de Suscripciones',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 16),
         Row(
@@ -265,7 +271,12 @@ class ClienteDetalleDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildEstadisticaCard(String label, String value, IconData icon, Color color) {
+  Widget _buildEstadisticaCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -285,26 +296,27 @@ class ClienteDetalleDialog extends StatelessWidget {
               color: Colors.white,
             ),
           ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[400],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
         ],
       ),
     );
   }
 
-  Widget _buildSeccionSuscripciones(List<Suscripcion> suscripcionesCliente, BuildContext context) {
+  Widget _buildSeccionSuscripciones(
+    List<Suscripcion> suscripcionesCliente,
+    BuildContext context,
+  ) {
     if (suscripcionesCliente.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
             children: [
-              Icon(Icons.subscriptions_outlined, size: 64, color: Colors.grey[400]),
+              Icon(
+                Icons.subscriptions_outlined,
+                size: 64,
+                color: Colors.grey[400],
+              ),
               const SizedBox(height: 16),
               Text(
                 'No tiene suscripciones registradas',
@@ -321,10 +333,16 @@ class ClienteDetalleDialog extends StatelessWidget {
       children: [
         const Text(
           'Suscripciones',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 16),
-        ...suscripcionesCliente.map((suscripcion) => _buildSuscripcionCard(suscripcion, context)),
+        ...suscripcionesCliente.map(
+          (suscripcion) => _buildSuscripcionCard(suscripcion, context),
+        ),
       ],
     );
   }
@@ -424,7 +442,10 @@ class ClienteDetalleDialog extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -483,7 +504,8 @@ class ClienteDetalleDialog extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (perfil.pin != null && perfil.pin!.isNotEmpty) ...[
+                              if (perfil.pin != null &&
+                                  perfil.pin!.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _buildPinChip(perfil.pin!, context),
                               ],
@@ -498,10 +520,7 @@ class ClienteDetalleDialog extends StatelessWidget {
                       children: [
                         const Text(
                           'Precio',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Colors.white70),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -530,7 +549,9 @@ class ClienteDetalleDialog extends StatelessWidget {
                     Expanded(
                       child: _buildInfoChip(
                         'Inicio',
-                        DateFormat('dd/MM/yyyy').format(suscripcion.fechaInicio),
+                        DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(suscripcion.fechaInicio),
                         Icons.event_available,
                       ),
                     ),
@@ -538,7 +559,9 @@ class ClienteDetalleDialog extends StatelessWidget {
                     Expanded(
                       child: _buildInfoChip(
                         'Creada',
-                        DateFormat('dd/MM/yyyy').format(suscripcion.fechaCreacion),
+                        DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(suscripcion.fechaCreacion),
                         Icons.access_time,
                       ),
                     ),
@@ -656,28 +679,13 @@ class ClienteDetalleDialog extends StatelessWidget {
   }
 
   Widget _buildFechaProximoPago(Suscripcion suscripcion) {
-    final hoy = DateTime.now();
-    final dias = suscripcion.fechaProximoPago.difference(hoy).inDays;
-
-    Color diasColor;
-    String diasTexto;
-
-    if (dias < 0) {
-      diasColor = Colors.red;
-      diasTexto = 'Vencida hace ${-dias} ${-dias == 1 ? 'día' : 'días'}';
-    } else if (dias == 0) {
-      diasColor = Colors.orange;
-      diasTexto = 'Vence hoy';
-    } else if (dias <= 3) {
-      diasColor = Colors.orange;
-      diasTexto = 'Vence en $dias ${dias == 1 ? 'día' : 'días'}';
-    } else if (dias <= 7) {
-      diasColor = Colors.blue;
-      diasTexto = 'Vence en $dias días';
-    } else {
-      diasColor = Colors.green;
-      diasTexto = 'Vence en $dias días';
-    }
+    final dias = FechaUtils.diasRestantes(suscripcion.fechaProximoPago);
+    final diasColor = FechaUtils.colorSegunDias(
+      suscripcion.fechaProximoPago,
+    ).color;
+    final diasTexto = FechaUtils.formatearSegunDias(
+      suscripcion.fechaProximoPago,
+    );
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -696,10 +704,7 @@ class ClienteDetalleDialog extends StatelessWidget {
               children: [
                 Text(
                   'Próximo Pago',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[400],
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[400]),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -739,10 +744,7 @@ class ClienteDetalleDialog extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[400],
-                  ),
+                  style: TextStyle(fontSize: 10, color: Colors.grey[400]),
                 ),
                 Text(
                   value,
@@ -766,7 +768,11 @@ class ClienteDetalleDialog extends StatelessWidget {
       children: [
         const Text(
           'Notas',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 12),
         Container(
@@ -816,7 +822,11 @@ class _CredencialesSectionState extends State<_CredencialesSection> {
       children: [
         const Text(
           'Credenciales de Acceso',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 12),
 
@@ -900,7 +910,9 @@ class _CredencialesSectionState extends State<_CredencialesSection> {
               ),
               IconButton(
                 style: ButtonStyle(
-                  foregroundColor: WidgetStateProperty.all<Color>(Colors.orange),
+                  foregroundColor: WidgetStateProperty.all<Color>(
+                    Colors.orange,
+                  ),
                 ),
                 icon: Icon(
                   _mostrarPassword ? Icons.visibility_off : Icons.visibility,
@@ -916,7 +928,9 @@ class _CredencialesSectionState extends State<_CredencialesSection> {
               IconButton(
                 icon: const Icon(Icons.copy, size: 16),
                 style: ButtonStyle(
-                  foregroundColor: WidgetStateProperty.all<Color>(Colors.orange),
+                  foregroundColor: WidgetStateProperty.all<Color>(
+                    Colors.orange,
+                  ),
                 ),
                 onPressed: () => _copiar(widget.cuenta.password, 'Contraseña'),
                 tooltip: 'Copiar',

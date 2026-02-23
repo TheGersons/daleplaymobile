@@ -244,10 +244,7 @@ class SupabaseService {
 
   Future<String> crearCuenta(CuentaCorreo cuenta) async {
     try {
-      // 1. Obtener plataforma para saber max_perfiles
-      final plataforma = await obtenerPlataformaPorId(cuenta.plataformaId);
-
-      // 2. Insertar cuenta
+      // 1. Insertar cuenta
       final json = cuenta.toJson();
       json.remove('id');
 
@@ -259,20 +256,8 @@ class SupabaseService {
 
       final cuentaId = response['id'] as String;
 
-      // 3. AUTO-CREAR PERFILES según max_perfiles de la plataforma
-      final perfilesACrear = <Map<String, dynamic>>[];
-
-      for (int i = 1; i <= plataforma.maxPerfiles; i++) {
-        perfilesACrear.add({
-          'cuenta_id': cuentaId,
-          'nombre_perfil': 'Perfil $i',
-          'pin': null,
-          'estado': 'disponible',
-          'fecha_creacion': DateTime.now().toIso8601String(),
-        });
-      }
-
-      await _client.from('perfiles').insert(perfilesACrear);
+      // Los perfiles ahora se crean manualmente
+      // respetando el límite de plataforma.maxPerfiles
 
       return cuentaId;
     } catch (e) {
@@ -410,6 +395,88 @@ class SupabaseService {
           .eq('id', id);
     } catch (e) {
       throw Exception('Error al eliminar perfil: $e');
+    }
+  }
+
+  /// Liberar perfil ocupado (cancela suscripción y libera perfil)
+  Future<void> liberarPerfil(
+    String perfilId, {
+    String? motivo,
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
+
+      // 1. Buscar suscripción asociada al perfil
+      final suscripcionData = await _client
+          .from('suscripciones')
+          .select()
+          .eq('perfil_id', perfilId)
+          .filter('deleted_at', 'is', null)
+          .eq('estado', 'suspendida')
+          .maybeSingle();
+
+      if (suscripcionData == null) {
+        // Si no hay suscripción suspendida, solo liberar el perfil
+        await _client
+            .from('perfiles')
+            .update({'estado': 'disponible'})
+            .eq('id', perfilId);
+        return;
+      }
+
+      final suscripcionId = suscripcionData['id'] as String;
+
+      // 2. Cancelar suscripción
+      await _client
+          .from('suscripciones')
+          .update({
+            'deleted_at': ahora.toIso8601String(),
+            'estado': 'cancelada',
+          })
+          .eq('id', suscripcionId);
+
+      // 3. Liberar perfil
+      await _client
+          .from('perfiles')
+          .update({'estado': 'disponible'})
+          .eq('id', perfilId);
+
+      // 4. Eliminar alertas
+      await _client
+          .from('alertas')
+          .delete()
+          .eq('suscripcion_id', suscripcionId);
+
+      // 5. Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'cancelada',
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas': motivo ?? 'Perfil liberado - Suscripción cancelada',
+      });
+    } catch (e) {
+      throw Exception('Error al liberar perfil: $e');
+    }
+  }
+
+  /// Verificar si un perfil está ocupado manualmente (sin cliente)
+  Future<bool> perfilOcupadoSinCliente(String perfilId) async {
+    try {
+      // Buscar suscripción suspendida sin cliente
+      final suscripcion = await _client
+          .from('suscripciones')
+          .select()
+          .eq('perfil_id', perfilId)
+          .filter('deleted_at', 'is', null)
+          .eq('estado', 'suspendida')
+          .filter('cliente_id', 'is', null)
+          .maybeSingle();
+
+      return suscripcion != null;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -774,11 +841,61 @@ class SupabaseService {
     }
   }
 
-  // ==================== RECORDATORIOS DE PAGO ====================
-  // Agregar estos métodos a la clase SupabaseService
+  /// Marcar suscripción suspendida como inactiva (desliga cliente, perfil queda ocupado)
+  Future<void> marcarSuscripcionInactiva(
+    String suscripcionId, {
+    String? motivo,
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
 
-  // Importar el modelo (agregar al inicio del archivo)
-  // import '../models/recordatorio_pago.dart';
+      // 1. Obtener suscripción y perfil
+      final suscripcionData = await _client
+          .from('suscripciones')
+          .select()
+          .eq('id', suscripcionId)
+          .single();
+
+      if (suscripcionData['estado'] != 'suspendida') {
+        throw Exception(
+          'Solo se pueden marcar como inactivas las suscripciones suspendidas',
+        );
+      }
+
+      final perfilId = suscripcionData['perfil_id'] as String;
+
+      // 2. Actualizar suscripción: desligar cliente
+      await _client
+          .from('suscripciones')
+          .update({
+            'cliente_id': null, // ← Desliga el cliente
+            'estado': 'suspendida', // ← Mantiene suspendida
+          })
+          .eq('id', suscripcionId);
+
+      // 3. Marcar perfil como ocupado MANUALMENTE (para control interno)
+      await _client
+          .from('perfiles')
+          .update({'estado': 'ocupado'})
+          .eq('id', perfilId);
+
+      // 4. Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'suspendida', // O crear nueva: 'marcada_inactiva'
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas':
+            motivo ??
+            'Cliente desligado - Perfil queda ocupado para control interno',
+      });
+    } catch (e) {
+      throw Exception('Error al marcar suscripción inactiva: $e');
+    }
+  }
+
+  // ==================== RECORDATORIOS DE PAGO ====================
 
   /// Obtener suscripciones que necesitan recordatorio (hoy y mañana)
   /// Incluye: activas + esperando_pago sin recordatorio hoy
@@ -786,12 +903,16 @@ class SupabaseService {
     try {
       print('🔵 [DEBUG] Obteniendo suscripciones para recordatorio...');
 
-      final hoy = DateTime.now();
+      // CAMBIO: Obtener fecha sin hora desde el inicio
+      final ahora = DateTime.now();
+      final hoy = DateTime(ahora.year, ahora.month, ahora.day);
       final manana = hoy.add(const Duration(days: 1));
 
       // Formatear fechas para comparación
-      final hoyStr = hoy.toIso8601String().split('T')[0];
-      final mananaStr = manana.toIso8601String().split('T')[0];
+      final hoyStr =
+          '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+      final mananaStr =
+          '${manana.year}-${manana.month.toString().padLeft(2, '0')}-${manana.day.toString().padLeft(2, '0')}';
 
       print('🔵 [DEBUG] Fecha hoy: $hoyStr');
       print('🔵 [DEBUG] Fecha mañana: $mananaStr');
@@ -801,7 +922,7 @@ class SupabaseService {
           .from('suscripciones')
           .select()
           .filter('deleted_at', 'is', null)
-          .inFilter('estado', ['activa', 'esperando_pago'])
+          .eq('estado', 'activa') // ← CAMBIO: Solo activas
           .inFilter('fecha_proximo_pago', [hoyStr, mananaStr])
           .order('fecha_proximo_pago');
 
@@ -821,27 +942,11 @@ class SupabaseService {
         );
       }
 
-      // Filtrar las que ya tienen recordatorio enviado hoy
-      final suscripcionesFiltradas = <Suscripcion>[];
+      // Ya NO filtrar por recordatorio
+      // Todas las activas que vencen hoy/mañana deben aparecer
+      print('✅ [DEBUG] Total de suscripciones: ${suscripciones.length}');
 
-      for (final suscripcion in suscripciones) {
-        final tieneRecordatorioHoy = await _tieneRecordatorioHoy(
-          suscripcion.id,
-        );
-        print(
-          '🔵 [DEBUG] Suscripción ${suscripcion.id} tiene recordatorio hoy: $tieneRecordatorioHoy',
-        );
-
-        if (!tieneRecordatorioHoy) {
-          suscripcionesFiltradas.add(suscripcion);
-        }
-      }
-
-      print(
-        '✅ [DEBUG] Total de suscripciones filtradas: ${suscripcionesFiltradas.length}',
-      );
-
-      return suscripcionesFiltradas;
+      return suscripciones;
     } catch (e) {
       print('❌ [ERROR] En obtenerSuscripcionesParaRecordatorio: $e');
       throw Exception('Error al obtener suscripciones para recordatorio: $e');
@@ -1088,6 +1193,156 @@ class SupabaseService {
           .toList();
     } catch (e) {
       throw Exception('Error al obtener recordatorios: $e');
+    }
+  }
+
+  /// Obtener suscripciones suspendidas
+  Future<List<Suscripcion>> obtenerSuscripcionesSuspendidas() async {
+    try {
+      final response = await _client
+          .from('suscripciones')
+          .select()
+          .filter('deleted_at', 'is', null)
+          .eq('estado', 'suspendida')
+          .order('fecha_proximo_pago');
+
+      return (response as List)
+          .map((json) => Suscripcion.fromJson(json))
+          .toList();
+    } catch (e) {
+      throw Exception('Error al obtener suscripciones suspendidas: $e');
+    }
+  }
+
+  /// Suspender suscripción (NO libera perfil)
+  Future<void> suspenderSuscripcion(
+    String suscripcionId, {
+    String? motivo,
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
+
+      // Cambiar estado a suspendida (perfil NO se libera)
+      await _client
+          .from('suscripciones')
+          .update({'estado': 'suspendida'})
+          .eq('id', suscripcionId);
+
+      // Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'suspendida',
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas': motivo ?? 'Suscripción suspendida temporalmente',
+      });
+    } catch (e) {
+      throw Exception('Error al suspender suscripción: $e');
+    }
+  }
+
+  /// Reactivar suscripción con pago
+  Future<void> reactivarSuscripcion({
+    required String suscripcionId,
+    required String clienteId,
+    required DateTime nuevaFechaPago,
+    required double monto,
+    required String metodoPago,
+    String? referencia,
+    String? notas,
+    String? usuarioId,
+  }) async {
+    try {
+      final ahora = DateTime.now();
+
+      // 1. Calcular fecha límite (fecha pago + 5 días)
+      final fechaLimite = DateTime(
+        nuevaFechaPago.year,
+        nuevaFechaPago.month,
+        nuevaFechaPago.day + 5,
+      );
+
+      // 2. Actualizar suscripción
+      await _client
+          .from('suscripciones')
+          .update({
+            'estado': 'activa',
+            'fecha_proximo_pago': nuevaFechaPago.toIso8601String().split(
+              'T',
+            )[0],
+            'fecha_limite_pago': fechaLimite.toIso8601String().split('T')[0],
+          })
+          .eq('id', suscripcionId);
+
+      // 3. Registrar pago
+      await _client.from('pagos').insert({
+        'suscripcion_id': suscripcionId,
+        'cliente_id': clienteId,
+        'monto': monto,
+        'fecha_pago': ahora.toIso8601String(),
+        'metodo_pago': metodoPago,
+        'referencia': referencia,
+        'notas': notas,
+        'registrado_por': usuarioId,
+      });
+
+      // 4. Eliminar alertas viejas
+      await _client
+          .from('alertas')
+          .delete()
+          .eq('suscripcion_id', suscripcionId);
+
+      // 5. Registrar en historial
+      await _client.from('historial_suscripciones').insert({
+        'suscripcion_id': suscripcionId,
+        'accion': 'renovada',
+        'fecha_cambio': ahora.toIso8601String(),
+        'usuario_id': usuarioId,
+        'notas': 'Reactivada desde suspensión - Pago: L $monto',
+      });
+    } catch (e) {
+      throw Exception('Error al reactivar suscripción: $e');
+    }
+  }
+
+  /// Verificar si todos los perfiles de una cuenta están inactivos
+  Future<bool> todosPerfilesInactivos(String cuentaId) async {
+    try {
+      // Obtener todos los perfiles de la cuenta
+      final perfilesResponse = await _client
+          .from('perfiles')
+          .select()
+          .eq('cuenta_id', cuentaId)
+          .filter('deleted_at', 'is', null);
+
+      final perfiles = perfilesResponse as List;
+
+      if (perfiles.isEmpty) return false;
+
+      // Verificar que TODOS los perfiles NO tengan suscripciones activas/espera
+      for (final perfil in perfiles) {
+        final perfilId = perfil['id'] as String;
+
+        final suscripcionActiva = await _client
+            .from('suscripciones')
+            .select()
+            .eq('perfil_id', perfilId)
+            .filter('deleted_at', 'is', null)
+            .inFilter('estado', ['activa', 'esperando_pago'])
+            .maybeSingle();
+
+        // Si algún perfil tiene suscripción activa/espera, NO están todos inactivos
+        if (suscripcionActiva != null) {
+          return false;
+        }
+      }
+
+      // Todos los perfiles están suspendidos o cancelados
+      return true;
+    } catch (e) {
+      print('Error al verificar perfiles inactivos: $e');
+      return false;
     }
   }
 }

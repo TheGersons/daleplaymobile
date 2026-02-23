@@ -1,3 +1,4 @@
+import 'package:daleplay/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -421,7 +422,12 @@ class CuentaDetalleDialog extends StatelessWidget {
                             border: Border.all(color: colorEstado),
                           ),
                           child: Text(
-                            esDisponible ? 'Disponible' : 'Ocupado',
+                            //considerar la 3ra opcion de suspendido
+                            suscripcion.estado == 'activa'
+                                ? 'Disponible'
+                                : suscripcion.estado == 'suspendido'
+                                ? 'Suspendido'
+                                : 'Ocupado',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -585,28 +591,12 @@ class CuentaDetalleDialog extends StatelessWidget {
   }
 
   Widget _buildFechaProximoPago(Suscripcion suscripcion, BuildContext context) {
-    final hoy = DateTime.now();
-    final dias = suscripcion.fechaProximoPago.difference(hoy).inDays;
-
-    Color diasColor;
-    String diasTexto;
-
-    if (dias < 0) {
-      diasColor = Colors.red;
-      diasTexto = 'Vencida hace ${-dias} ${-dias == 1 ? 'día' : 'días'}';
-    } else if (dias == 0) {
-      diasColor = Colors.orange;
-      diasTexto = 'Vence hoy';
-    } else if (dias <= 3) {
-      diasColor = Colors.orange;
-      diasTexto = 'Vence en $dias ${dias == 1 ? 'día' : 'días'}';
-    } else if (dias <= 7) {
-      diasColor = Colors.blue;
-      diasTexto = 'Vence en $dias días';
-    } else {
-      diasColor = Colors.green;
-      diasTexto = 'Vence en $dias días';
-    }
+    final diasColor = FechaUtils.colorSegunDias(
+      suscripcion.fechaProximoPago,
+    ).color;
+    final diasTexto = FechaUtils.formatearSegunDias(
+      suscripcion.fechaProximoPago,
+    );
 
     return Container(
       padding: const EdgeInsets.all(10),
