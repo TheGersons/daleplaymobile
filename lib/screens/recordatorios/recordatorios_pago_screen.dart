@@ -24,6 +24,8 @@ class RecordatoriosPagoScreen extends StatefulWidget {
 class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
     with SingleTickerProviderStateMixin {
   final _supabaseService = SupabaseService();
+  static const String CLIENTE_SIN_ASIGNAR =
+      '00000000-0000-0000-0000-000000000001';
 
   late TabController _tabController;
 
@@ -34,6 +36,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
   List<Plataforma> _plataformas = [];
   List<Perfil> _perfiles = [];
   List<CuentaCorreo> _cuentas = [];
+  List<Suscripcion> _suscripciones = [];
 
   bool _isLoading = true;
 
@@ -68,6 +71,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
       final plataformas = await _supabaseService.obtenerPlataformas();
       final perfiles = await _supabaseService.obtenerPerfiles();
       final cuentas = await _supabaseService.obtenerCuentas();
+      final todasSuscripciones = await _supabaseService.obtenerSuscripciones();
 
       setState(() {
         _suscripcionesRecordatorio = recordatorio;
@@ -77,6 +81,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
         _suscripcionesSuspendidas = suspendidas;
         _perfiles = perfiles;
         _cuentas = cuentas;
+        _suscripciones = todasSuscripciones;
       });
     } catch (e) {
       if (mounted) {
@@ -669,11 +674,55 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
   Widget _buildCuentaEsperaCard(
     CuentaCorreo cuenta,
     Plataforma plataforma,
-    List<Suscripcion> suscripciones,
+    List<Suscripcion> suscripcionesEnEspera,
   ) {
     final colorPlataforma = Color(
       int.parse(plataforma.color.replaceFirst('#', '0xFF')),
     );
+
+    // Obtener TODOS los perfiles de esta cuenta
+    final todosPerfiles = _obtenerTodosPerfilesDeCuenta(cuenta.id);
+
+    // Separar por categorías
+    final perfilesEnEspera = todosPerfiles.where((p) {
+      final estado = _obtenerEstadoPerfil(
+        p['perfil'] as Perfil,
+        p['suscripcion'] as Suscripcion?,
+      );
+      return estado == 'esperando_pago';
+    }).toList();
+
+    final perfilesSuspendidos = todosPerfiles.where((p) {
+      final estado = _obtenerEstadoPerfil(
+        p['perfil'] as Perfil,
+        p['suscripcion'] as Suscripcion?,
+      );
+      return estado == 'suspendida';
+    }).toList();
+
+    final perfilesSinCliente = todosPerfiles.where((p) {
+      final estado = _obtenerEstadoPerfil(
+        p['perfil'] as Perfil,
+        p['suscripcion'] as Suscripcion?,
+      );
+      return estado == 'sin_cliente';
+    }).toList();
+
+    final perfilesActivos = todosPerfiles.where((p) {
+      final estado = _obtenerEstadoPerfil(
+        p['perfil'] as Perfil,
+        p['suscripcion'] as Suscripcion?,
+      );
+      return estado == 'activa';
+    }).toList();
+
+    final perfilesDisponibles = todosPerfiles.where((p) {
+      final estado = _obtenerEstadoPerfil(
+        p['perfil'] as Perfil,
+        p['suscripcion'] as Suscripcion?,
+      );
+      return estado == 'disponible';
+    }).toList();
 
     return Card(
       child: Theme(
@@ -681,7 +730,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
         child: ExpansionTile(
           tilePadding: EdgeInsets.zero,
           childrenPadding: EdgeInsets.zero,
-          // Título = Header con credenciales
+          initiallyExpanded: true,
           title: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -692,7 +741,6 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Nombre de plataforma y badge
                 Row(
                   children: [
                     _buildLogo(plataforma),
@@ -701,7 +749,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
                       child: Text(
                         plataforma.nombre,
                         style: const TextStyle(
-                          fontSize: 18, // ← Reducir de 20
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -718,7 +766,7 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
                         border: Border.all(color: Colors.orange),
                       ),
                       child: Text(
-                        '${suscripciones.length}',
+                        '${perfilesEnEspera.length}',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -726,12 +774,10 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // Credenciales (siempre visibles)
                 _buildCredencialRow(
                   Icons.email,
                   'Email',
@@ -749,11 +795,78 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
               ],
             ),
           ),
-
-          // Children = Lista de suscripciones (colapsable)
-          children: suscripciones.map((suscripcion) {
-            return _buildSuscripcionEsperaItem(suscripcion);
-          }).toList(),
+          children: [
+            if (perfilesEnEspera.isNotEmpty) ...[
+              _buildSeccionHeader(
+                '⚠️ REQUIEREN ATENCIÓN (${perfilesEnEspera.length})',
+                Colors.orange,
+              ),
+              ...perfilesEnEspera.map((perfilInfo) {
+                return _buildPerfilItem(
+                  perfilInfo['perfil'] as Perfil,
+                  perfilInfo['suscripcion'] as Suscripcion,
+                  perfilInfo['cliente'] as Cliente?,
+                  'esperando_pago',
+                );
+              }),
+            ],
+            if (perfilesSuspendidos.isNotEmpty) ...[
+              _buildSeccionHeader(
+                '⏸️ SUSPENDIDOS (${perfilesSuspendidos.length})',
+                Colors.purple,
+              ),
+              ...perfilesSuspendidos.map((perfilInfo) {
+                return _buildPerfilItem(
+                  perfilInfo['perfil'] as Perfil,
+                  perfilInfo['suscripcion'] as Suscripcion,
+                  perfilInfo['cliente'] as Cliente?,
+                  'suspendida',
+                );
+              }),
+            ],
+            if (perfilesSinCliente.isNotEmpty) ...[
+              _buildSeccionHeader(
+                '🔒 SIN CLIENTE (${perfilesSinCliente.length})',
+                Colors.orange[700]!,
+              ),
+              ...perfilesSinCliente.map((perfilInfo) {
+                return _buildPerfilItem(
+                  perfilInfo['perfil'] as Perfil,
+                  perfilInfo['suscripcion'] as Suscripcion,
+                  null,
+                  'sin_cliente',
+                );
+              }),
+            ],
+            if (perfilesActivos.isNotEmpty) ...[
+              _buildSeccionHeader(
+                '✅ ACTIVOS (${perfilesActivos.length})',
+                Colors.green,
+              ),
+              ...perfilesActivos.map((perfilInfo) {
+                return _buildPerfilItem(
+                  perfilInfo['perfil'] as Perfil,
+                  perfilInfo['suscripcion'] as Suscripcion,
+                  perfilInfo['cliente'] as Cliente?,
+                  'activa',
+                );
+              }),
+            ],
+            if (perfilesDisponibles.isNotEmpty) ...[
+              _buildSeccionHeader(
+                '🟢 DISPONIBLES (${perfilesDisponibles.length})',
+                Colors.grey,
+              ),
+              ...perfilesDisponibles.map((perfilInfo) {
+                return _buildPerfilItem(
+                  perfilInfo['perfil'] as Perfil,
+                  null,
+                  null,
+                  'disponible',
+                );
+              }),
+            ],
+          ],
         ),
       ),
     );
@@ -1521,6 +1634,396 @@ class _RecordatoriosPagoScreenState extends State<RecordatoriosPagoScreen>
           ),
       ],
     );
+  }
+  // ============================================
+  // PARTE 3/6: MÉTODOS HELPERS NUEVOS
+  // UBICACIÓN: Agregar DESPUÉS del método _agruparPorCuenta (línea ~137)
+  // O si prefieres, agregar antes de _buildCuentaEsperaCard
+  // ============================================
+
+  // Obtener TODOS los perfiles de una cuenta con su información completa
+  List<Map<String, dynamic>> _obtenerTodosPerfilesDeCuenta(String cuentaId) {
+    final perfilesCuenta = _perfiles
+        .where((p) => p.cuentaId == cuentaId)
+        .toList();
+
+    final perfilesConInfo = <Map<String, dynamic>>[];
+
+    for (final perfil in perfilesCuenta) {
+      Suscripcion? suscripcion;
+      Cliente? cliente;
+
+      try {
+        suscripcion = _suscripciones.firstWhere(
+          (s) => s.perfilId == perfil.id && s.estado != 'cancelada',
+        );
+
+        if (suscripcion.clienteId != CLIENTE_SIN_ASIGNAR) {
+          cliente = _clientes.firstWhere(
+            (c) => c.id == suscripcion!.clienteId,
+            orElse: () => Cliente(
+              id: '',
+              nombreCompleto: '',
+              telefono: '',
+              estado: '',
+              fechaRegistro: DateTime.now(),
+            ),
+          );
+          if (cliente.id.isEmpty) cliente = null;
+        }
+      } catch (e) {
+        // No tiene suscripción activa
+      }
+
+      perfilesConInfo.add({
+        'perfil': perfil,
+        'suscripcion': suscripcion,
+        'cliente': cliente,
+      });
+    }
+
+    return perfilesConInfo;
+  }
+
+  // Determinar el estado visual de un perfil
+  String _obtenerEstadoPerfil(Perfil perfil, Suscripcion? suscripcion) {
+    if (suscripcion == null) {
+      return 'disponible';
+    }
+
+    if (suscripcion.clienteId == CLIENTE_SIN_ASIGNAR) {
+      return 'sin_cliente';
+    }
+
+    return suscripcion.estado;
+  }
+
+  // Widget para headers de sección
+  Widget _buildSeccionHeader(String titulo, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        border: Border(bottom: BorderSide(color: color.withOpacity(0.3))),
+      ),
+      child: Text(
+        titulo,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  // Obtener ícono por estado
+  IconData _getIconoPorEstado(String estado) {
+    switch (estado) {
+      case 'esperando_pago':
+        return Icons.warning;
+      case 'suspendida':
+        return Icons.pause_circle;
+      case 'sin_cliente':
+        return Icons.lock;
+      case 'activa':
+        return Icons.check_circle;
+      case 'disponible':
+        return Icons.radio_button_unchecked;
+      default:
+        return Icons.help;
+    }
+  }
+
+  // Obtener color por estado
+  Color _getColorPorEstado(String estado) {
+    switch (estado) {
+      case 'esperando_pago':
+        return Colors.orange;
+      case 'suspendida':
+        return Colors.purple;
+      case 'sin_cliente':
+        return Colors.orange[700]!;
+      case 'activa':
+        return Colors.green;
+      case 'disponible':
+        return Colors.grey;
+      default:
+        return Colors.white;
+    }
+  }
+
+  // ============================================
+  // PARTE 4/6: MÉTODO _buildPerfilItem Y SUS HELPERS
+  // UBICACIÓN: Agregar DESPUÉS de los helpers de la Parte 3
+  // ============================================
+
+  Widget _buildPerfilItem(
+    Perfil perfil,
+    Suscripcion? suscripcion,
+    Cliente? cliente,
+    String estadoVisual,
+  ) {
+    final plataforma = _plataformas.firstWhere(
+      (p) =>
+          p.id ==
+          (suscripcion?.plataformaId ??
+              _cuentas.firstWhere((c) => c.id == perfil.cuentaId).plataformaId),
+    );
+
+    int? diasRestantes;
+    Color? colorDias;
+    if (suscripcion != null) {
+      diasRestantes = _diasRestantes(suscripcion.fechaProximoPago);
+      if (diasRestantes < 0) {
+        colorDias = Colors.red[900]!;
+      } else if (diasRestantes == 0) {
+        colorDias = Colors.red;
+      } else if (diasRestantes == 1) {
+        colorDias = Colors.orange;
+      } else {
+        colorDias = Colors.blue;
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey[800]!)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _getIconoPorEstado(estadoVisual),
+                  size: 16,
+                  color: _getColorPorEstado(estadoVisual),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (cliente != null) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${cliente.nombreCompleto} - ${cliente.telefono}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                Clipboard.setData(
+                                  ClipboardData(text: cliente.telefono),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Teléfono copiado'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.copy, size: 16),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      Text(
+                        perfil.nombrePerfil,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: cliente != null
+                              ? Colors.grey[400]
+                              : Colors.white,
+                          fontWeight: cliente != null
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (suscripcion != null)
+                  Expanded(
+                    child: _buildInfoChip(
+                      Icons.attach_money,
+                      'L ${suscripcion.precio.toStringAsFixed(2)}',
+                      Colors.green,
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: _getChipEstado(
+                    estadoVisual,
+                    suscripcion,
+                    colorDias,
+                    diasRestantes,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _getBotonesPorEstado(
+              estadoVisual,
+              suscripcion,
+              perfil,
+              cliente!,
+              plataforma,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper: Obtener chip de estado
+  Widget _getChipEstado(
+    String estadoVisual,
+    Suscripcion? suscripcion,
+    Color? colorDias,
+    int? diasRestantes,
+  ) {
+    if (estadoVisual == 'disponible') {
+      return _buildInfoChip(Icons.check_circle, 'Disponible', Colors.grey);
+    }
+
+    if (estadoVisual == 'sin_cliente') {
+      return _buildInfoChip(Icons.lock, 'Sin Cliente', Colors.orange[700]!);
+    }
+
+    if (estadoVisual == 'suspendida') {
+      return _buildInfoChip(Icons.pause_circle, 'Suspendida', Colors.purple);
+    }
+
+    if (estadoVisual == 'activa' && suscripcion != null) {
+      return _buildInfoChip(
+        Icons.check_circle,
+        'Al día - ${DateFormat('dd/MM').format(suscripcion.fechaProximoPago)}',
+        Colors.green,
+      );
+    }
+
+    if (suscripcion != null && colorDias != null && diasRestantes != null) {
+      String textoFecha;
+      if (diasRestantes < 0) {
+        textoFecha = 'Vencida hace ${diasRestantes.abs()} día(s)';
+      } else if (diasRestantes == 0) {
+        textoFecha = 'Vence HOY';
+      } else if (diasRestantes == 1) {
+        textoFecha = 'Vence MAÑANA';
+      } else {
+        textoFecha = DateFormat(
+          'dd/MM/yyyy',
+        ).format(suscripcion.fechaProximoPago);
+      }
+
+      return _buildInfoChip(Icons.calendar_today, textoFecha, colorDias);
+    }
+
+    return const SizedBox();
+  }
+
+  // Helper: Obtener botones según estado
+  Widget _getBotonesPorEstado(
+    String estadoVisual,
+    Suscripcion? suscripcion,
+    Perfil perfil,
+    Cliente cliente,
+    Plataforma plataforma,
+  ) {
+    if (estadoVisual == 'esperando_pago' && suscripcion != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: IconButton(
+              onPressed: () => _suspenderSuscripcion(suscripcion),
+              icon: const Icon(Icons.pause_circle, size: 20),
+              color: Colors.orange,
+              tooltip: 'Suspender',
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: IconButton(
+              onPressed: () =>
+                  _renovarSuscripcion(suscripcion, cliente, plataforma),
+              icon: const Icon(Icons.refresh, size: 20),
+              color: Colors.green,
+              tooltip: 'Renovar',
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: IconButton(
+              onPressed: () => _cancelarSuscripcion(suscripcion, cliente),
+              icon: const Icon(Icons.cancel, size: 20),
+              color: Colors.red,
+              tooltip: 'Cancelar',
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (estadoVisual == 'suspendida' && suscripcion != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: TextButton.icon(
+              onPressed: () => _reactivarSuscripcion(suscripcion),
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('Reactivar', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(foregroundColor: Colors.green),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: TextButton.icon(
+              onPressed: () => _cancelarSuscripcion(suscripcion, cliente),
+              icon: const Icon(Icons.delete_forever, size: 18),
+              label: const Text('Cancelar', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (estadoVisual == 'sin_cliente') {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          //boton por definir
+          onPressed: () {},
+          icon: const Icon(Icons.person_add, size: 18),
+          label: const Text('Asignar Cliente', style: TextStyle(fontSize: 12)),
+          style: TextButton.styleFrom(foregroundColor: Colors.green),
+        ),
+      );
+    }
+
+    return const SizedBox();
   }
 
   Future<void> _renovarSuscripcion(
